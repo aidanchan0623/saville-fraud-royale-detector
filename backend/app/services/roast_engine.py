@@ -23,13 +23,18 @@ class RoastEngine:
             templates = ["Based on recent deck and matchup patterns, the evidence is suspicious."]
         rng = random.Random(f"{seed}:{rule_id}:{title}:{goblin_mode}")
         text = rng.choice(templates).format(**metrics)
+        plain_explanation = metrics.get(
+            "plain_explanation",
+            "This claim is based on recent deck composition, battle outcomes, card levels, or matchup patterns.",
+        )
         return {
             "rule_id": rule_id,
             "title": title,
             "text": text,
+            "funny_description": text,
+            "plain_language_explanation": plain_explanation,
             "evidence": evidence,
             "confidence": confidence,
             "relevant_cards": relevant_cards,
             "metrics": metrics,
         }
-

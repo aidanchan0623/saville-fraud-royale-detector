@@ -1,0 +1,243 @@
+TIER_COPY = {
+    "respectable": {
+        "range": (0, 20),
+        "labels": [
+            "Respectable Citizen",
+            "Surprisingly Functional",
+            "Cleared for Ladder Duty",
+            "Evidence Insufficient",
+            "Suspiciously Competent",
+        ],
+        "descriptions": [
+            "The evidence is weak. You may actually be playing with a plan.",
+            "Against all expectations, your recent matches do not qualify as a public incident.",
+            "Your gameplay has survived preliminary inspection.",
+            "There is not enough evidence to make fun of you properly. Yet.",
+            "Your recent deck and matchup patterns look mostly reasonable.",
+            "The report tried to escalate, but the numbers asked it to calm down.",
+            "Your battle log contains mistakes, but not enough to convene a committee.",
+            "The cards and results are broadly aligned, which is annoying for comedy.",
+            "You are either competent or hiding the chaos very efficiently.",
+            "The sample suggests a plan, or at least a convincing impersonation of one.",
+            "Recent results do not support a dramatic accusation.",
+            "You may proceed on ladder with only light supervision.",
+        ],
+        "headlines": [
+            "The evidence is disappointingly normal.",
+            "The investigation has been forced to respect the data.",
+            "Your deck appears to know why it exists.",
+            "No major public incident detected.",
+            "The tower declines to press charges.",
+        ],
+    },
+    "mild": {
+        "range": (21, 40),
+        "labels": [
+            "Mild Suspect",
+            "Tactical Question Mark",
+            "Performance Worth Monitoring",
+            "Slightly Concerning",
+            "Small Fraud Allegations",
+        ],
+        "descriptions": [
+            "Nothing illegal yet, but the numbers have started asking follow-up questions.",
+            "You are not fraudulent. You are making decisions that require context.",
+            "The authorities are not involved. For now.",
+            "Your deck is behaving normally enough to avoid an investigation, barely.",
+            "A few patterns deserve a raised eyebrow, not a full hearing.",
+            "Recent evidence is light, but the committee is taking notes.",
+            "This is the kind of report that starts with concern and ends with a shrug.",
+            "Your results are not alarming, but they are not exactly sending flowers.",
+            "You are mostly fine, with several small tactical invoices outstanding.",
+            "The deck is functional, but the battle log has questions.",
+            "There is a faint smell of avoidable nonsense.",
+            "The case file is thin, but it exists.",
+        ],
+        "headlines": [
+            "A few choices have entered the group chat.",
+            "The numbers are not mad, just curious.",
+            "Minor allegations, major entertainment value.",
+            "This is not a scandal. It is a memo.",
+            "Your deck has requested better documentation.",
+        ],
+    },
+    "questionable": {
+        "range": (41, 60),
+        "labels": [
+            "Suspicious Behaviour",
+            "Questionable Gameplay",
+            "Evidence of Tactical Misconduct",
+            "Statistically Concerning Activity",
+            "A Developing Ladder Case",
+            "Performance Under Review",
+        ],
+        "descriptions": [
+            "You are losing often enough in favourable situations that the statistics have started squinting.",
+            "Your deck had the tools. The result suggests the tools were not held correctly.",
+            "Not enough evidence for a conviction, but enough to open a folder.",
+            "You appear to be wasting advantages with impressive consistency.",
+            "The report found repeated patterns that are difficult to wave away.",
+            "Your recent results contain a few too many avoidable-looking losses.",
+            "The deck is not innocent, but the operator is also in the room.",
+            "This is playful analysis, not a real skill verdict, but the numbers are uncomfortable.",
+            "Your battle log keeps producing small alarms in different departments.",
+            "There is a plan somewhere here, but it is not always making contact with the results.",
+            "Your advantages are not converting as cleanly as they should.",
+            "The data is not yelling. It is speaking firmly.",
+        ],
+        "headlines": [
+            "The statistics have opened a folder.",
+            "Your advantages are leaking value.",
+            "This report has moved from joke to paperwork.",
+            "The evidence is no longer whispering.",
+            "Several decisions need adult supervision.",
+        ],
+    },
+    "high": {
+        "range": (61, 80),
+        "labels": [
+            "Midladder Criminal",
+            "Trophy Road Offender",
+            "Repeated Tactical Misconduct",
+            "High-Confidence Incident",
+            "Deck Abuse Allegations",
+        ],
+        "descriptions": [
+            "Your gameplay has crossed from questionable into administratively concerning.",
+            "The trophy road has filed a complaint.",
+            "You are treating every loss like a scientific experiment, except none of the experiments are working.",
+            "Your deck is no longer making mistakes. It is building a portfolio.",
+            "Recent results contain repeated evidence of panic changes, matchup trauma, or poor advantage conversion.",
+            "The report can no longer pretend this is just one bad queue session.",
+            "Your patterns are loud enough to be heard over the arena music.",
+            "The battle log suggests the cards are doing interviews without a lawyer.",
+            "Your recent ladder behaviour has become a recurring administrative burden.",
+            "The deck may be playable, but the results are filing complaints.",
+            "This is not one issue. It is a collection.",
+            "Your evidence pile has achieved structural integrity.",
+        ],
+        "headlines": [
+            "The case file is now heavy.",
+            "Your deck has entered formal review.",
+            "The ladder has submitted a complaint.",
+            "Several patterns have become repeat offenders.",
+            "This is a high-confidence incident.",
+        ],
+    },
+    "extreme": {
+        "range": (81, 100),
+        "labels": [
+            "Federal Fraud Investigation",
+            "National Ladder Emergency",
+            "The Cards Deserve a New Owner",
+            "Criminal Levels of Underperformance",
+            "A Public Safety Concern",
+        ],
+        "descriptions": [
+            "Your cards are strong enough, your confidence appears high, and your win rate has entered witness-protection territory.",
+            "This is no longer a deck. It is evidence.",
+            "The tower has requested legal representation.",
+            "Your recent battle log should be stored in a secure evidence locker.",
+            "Multiple indicators are pointing at the same uncomfortable conclusion.",
+            "The report tried to be gentle, but the metrics brought a megaphone.",
+            "Your deck, matchups, and outcomes have formed a committee against you.",
+            "This is playful, but the numbers are doing serious theatre.",
+            "Your recent matches contain enough red flags to decorate an arena.",
+            "The cards did not sign up for this much testimony.",
+            "Your results have left the dashboard no polite option.",
+            "The final score is less a warning and more a siren.",
+        ],
+        "headlines": [
+            "The battle log has become an evidence locker.",
+            "The cards have requested new management.",
+            "This report has entered emergency protocol.",
+            "Your recent results are testifying against you.",
+            "The tower would like a lawyer.",
+        ],
+    },
+}
+
+
+CONTRIBUTOR_COPY = {
+    "Poor overall win rate": {
+        "description": "Recent wins are not keeping pace with recent losses.",
+        "roasts": [
+            "The win column is present, but not emotionally available.",
+            "The ladder has seen enough to start taking attendance.",
+            "Your recent results are doing a dramatic reading of concern.",
+        ],
+    },
+    "Lost while overlevelled": {
+        "description": "You lost matches where your average deck level was meaningfully higher than the opponent's.",
+        "roasts": [
+            "The upgrades did their job. The operator remains under review.",
+            "Your cards arrived with a level advantage and left with questions.",
+            "The deck brought power. The result brought paperwork.",
+        ],
+    },
+    "Repeated panic deck changes": {
+        "description": "You made major deck changes right after losses, which often signals reaction rather than adjustment.",
+        "roasts": [
+            "After losing, you do not adapt. You redecorate.",
+            "Every loss sends you back to the laboratory with no hypothesis.",
+            "Your strategy after a loss is apparently to become a different person.",
+        ],
+    },
+    "Emotional support card detected": {
+        "description": "One card keeps appearing despite a poor recent win rate.",
+        "roasts": [
+            "The numbers say bench it. Your heart filed an appeal.",
+            "It may not be winning, but it clearly has tenure.",
+            "That card has diplomatic immunity.",
+        ],
+    },
+    "Deck identity crisis": {
+        "description": "The current deck has weak or conflicting role coverage.",
+        "roasts": [
+            "Every card has a job title, but nobody knows what the company does.",
+            "The deck is negotiating with itself.",
+            "This is less an archetype and more a committee meeting.",
+        ],
+    },
+    "Close-loss ratio": {
+        "description": "Too many one-crown games are ending the wrong way.",
+        "roasts": [
+            "Touching distance is not a win condition.",
+            "You are dangerously close to clutch. The evidence refuses to complete the journey.",
+            "The final minute has not been your friend.",
+        ],
+    },
+    "Three-crown loss ratio": {
+        "description": "A noticeable share of losses ended in full tower collapse.",
+        "roasts": [
+            "The tower did not fall. It resigned.",
+            "Some losses are defeats. These are evacuation drills.",
+            "The crown count brought a fire alarm.",
+        ],
+    },
+    "Weak against a recurring matchup": {
+        "description": "The same opponent card core keeps showing up in losses.",
+        "roasts": [
+            "This matchup has a recurring appointment with your tower.",
+            "The predator is not subtle. It keeps signing the guest book.",
+            "Your deck sees this shell and starts packing.",
+        ],
+    },
+    "High elixir with poor results": {
+        "description": "The deck is expensive, but the recent results are not paying rent.",
+        "roasts": [
+            "Your deck costs too much to be this confused.",
+            "The elixir budget is large. The plan is still missing.",
+            "This push needs a loan officer and a supervisor.",
+        ],
+    },
+    "Repeated low-performing deck usage": {
+        "description": "The main deck keeps returning despite a weak recent win rate.",
+        "roasts": [
+            "Consistency is admirable. So is noticing fire.",
+            "The relationship has history, but the recent results are not romantic.",
+            "That deck is less a strategy and more a long-term lease.",
+        ],
+    },
+}
+

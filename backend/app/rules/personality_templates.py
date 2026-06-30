@@ -1,0 +1,240 @@
+SECTION_TITLES = [
+    "Psychological Evaluation",
+    "Goblin Personality Report",
+    "Battlefield Personality",
+    "Deck Psych Report",
+    "Tactical Character Assessment",
+    "Ladder Behaviour Evaluation",
+]
+
+PERSONALITY_TEMPLATES = [
+    {
+        "title": "Loyal But Tactically Unsupervised",
+        "summary": "You are a loyal one-deck believer with a recent battle log that keeps asking for supervision. You trust {main_card} more than the evidence, and your difficult matchups are starting to look less like betrayal and more like a recurring invoice.",
+        "diagnosis": "High confidence, unclear plan.",
+        "intervention": "Try changing one card before changing your entire emotional state.",
+    },
+    {
+        "title": "Confident First, Planning Second",
+        "summary": "Your deck-building style suggests confidence first, planning second, and a strong belief that upgrades can solve tactical discomfort. The battle log respects the ambition while questioning the execution.",
+        "diagnosis": "Big energy, mixed receipts.",
+        "intervention": "Commit to one plan before committing eight cards.",
+    },
+    {
+        "title": "Expensive Panic Response Unit",
+        "summary": "You are calm until the match becomes stressful, at which point the strategy becomes deploying something expensive and hoping the tower understands. The deck has tools, but the crisis-management department is loud.",
+        "diagnosis": "Pressure response requires patching.",
+        "intervention": "Spend one match defending before auditioning a new emergency button.",
+    },
+    {
+        "title": "Adaptation By Rebrand",
+        "summary": "You have the consistency of a deck specialist and the coping mechanisms of a panic switcher, which is a uniquely ambitious contradiction. Every loss appears to create a new version of the same question.",
+        "diagnosis": "Change management is overfunded.",
+        "intervention": "Try adjusting a role, not rebuilding your identity.",
+    },
+    {
+        "title": "Wrong Solution Specialist",
+        "summary": "You play like someone who has identified the problem but keeps applying the wrong solution with increasing confidence. The data sees effort, but effort has not filed the correct paperwork.",
+        "diagnosis": "Problem awareness, solution confusion.",
+        "intervention": "Before queueing again, name the exact matchup problem in one sentence.",
+    },
+    {
+        "title": "Stubbornness Research Program",
+        "summary": "You are not necessarily bad at Clash Royale. You are conducting a long-term experiment to determine whether stubbornness can outperform adaptation. The early results are not peer-reviewed.",
+        "diagnosis": "Persistence exceeds evidence.",
+        "intervention": "Let the next loss teach one small lesson instead of launching a full lawsuit.",
+    },
+    {
+        "title": "Five-Year Plan, Group-Project Results",
+        "summary": "Your deck has the discipline of a five-year plan and the results of a group project where nobody read the brief. The cards are individually employable, but the meeting notes are missing.",
+        "diagnosis": "Organized deck, disorganized outcome.",
+        "intervention": "Give every card a job and fire the duplicate roles.",
+    },
+    {
+        "title": "Matchmaking Conspiracy Intern",
+        "summary": "You appear to believe every loss has two possible causes: {trauma_card} or matchmaking. The data has a third theory, and it is standing uncomfortably close to your deck list.",
+        "diagnosis": "External blame, internal evidence.",
+        "intervention": "Review one loss without blaming the first card that annoyed you.",
+    },
+    {
+        "title": "Main Character Manager",
+        "summary": "{main_card} appears to have executive privileges in this account. The rest of the deck is technically present, but one card keeps getting the press conference whether or not the win rate approves.",
+        "diagnosis": "One card has too much influence.",
+        "intervention": "Let another card be useful without turning it into a personality.",
+    },
+    {
+        "title": "Receipts-Based Denial",
+        "summary": "Your recent battle log is not cruel; it is specific. It points at {deck_style}, {behaviour_title}, and a few recurring matchups with the patience of a teacher waiting for the class to settle.",
+        "diagnosis": "The evidence is organized.",
+        "intervention": "Fix the loudest pattern first, not the funniest one.",
+    },
+    {
+        "title": "Strategic Weather System",
+        "summary": "Your ladder behaviour changes with the weather: calm when ahead, dramatic when pressured, and extremely creative after a loss. The deck does not lack personality. It may have too much.",
+        "diagnosis": "Forecast: scattered decisions.",
+        "intervention": "Make one boring improvement and let it work for five matches.",
+    },
+    {
+        "title": "Comfort Card Custodian",
+        "summary": "You keep a favourite card close even when the numbers are not returning the affection. That is touching as a story and worrying as a ladder strategy.",
+        "diagnosis": "Sentiment is beating selection.",
+        "intervention": "Bench the comfort card for one session and observe the silence.",
+    },
+    {
+        "title": "Tower-Side Optimist",
+        "summary": "You keep entering difficult matchups with the spirit of someone who thinks the opponent may forget their win condition. The optimism is charming. The crown count is less charmed.",
+        "diagnosis": "Hope is overrepresented.",
+        "intervention": "Build one actual answer to the thing that keeps hurting you.",
+    },
+    {
+        "title": "Evidence-Avoidant Technician",
+        "summary": "The report suggests you are close to understanding the problem, then immediately queueing another match before the lesson finishes loading. This is deck analysis, not real psychology, but the battle log is making eye contact.",
+        "diagnosis": "Learning loop interrupted.",
+        "intervention": "Pause after two losses and identify the repeated card core.",
+    },
+    {
+        "title": "High-Confidence Ladder Poet",
+        "summary": "Your deck tells a dramatic story about pressure, loyalty, and occasional tower sadness. The issue is not a lack of conviction; it is that conviction keeps walking into the same counter.",
+        "diagnosis": "Strong narrative, weak adaptation.",
+        "intervention": "Replace one dramatic card with one boring answer.",
+    },
+    {
+        "title": "Emergency Architecture Student",
+        "summary": "After losses, your deck history starts looking like emergency construction. Walls move, roles shift, and nobody appears to have checked whether the building has a foundation.",
+        "diagnosis": "Rebuilds exceed reasons.",
+        "intervention": "Write the hypothesis before changing the deck.",
+    },
+    {
+        "title": "The Responsible Disaster",
+        "summary": "You have enough sensible ingredients to avoid total nonsense, but the results keep producing little sparks. This is not a full collapse; it is a controlled burn with suspicious confidence.",
+        "diagnosis": "Mostly functional, occasionally alarming.",
+        "intervention": "Keep the shell, fix the repeated failure point.",
+    },
+    {
+        "title": "Deck Identity Negotiator",
+        "summary": "Your deck seems to be negotiating between several identities at once. It wants pressure, defense, comfort, and a dramatic comeback, which is a lot to ask from eight cards.",
+        "diagnosis": "Too many strategies in one coat.",
+        "intervention": "Choose the win condition first and make the rest serve it.",
+    },
+    {
+        "title": "Clutch Pending Review",
+        "summary": "You are reaching close games often enough to imply competence, then letting the final minute make the report interesting. The tower is not angry. It is disappointed in a measurable way.",
+        "diagnosis": "Almost is doing heavy lifting.",
+        "intervention": "Practice defending a lead instead of auditioning for drama.",
+    },
+    {
+        "title": "Level Advantage Minimalist",
+        "summary": "When your card levels help, you do not always convert the advantage into a clean win. That does not prove anything about skill, but it does give the Fraud Score a chair and a microphone.",
+        "diagnosis": "Advantages need supervision.",
+        "intervention": "Treat level advantage as a cushion, not a strategy.",
+    },
+    {
+        "title": "Queue Again Philosopher",
+        "summary": "Your coping mechanism appears to be queueing again before the previous match finishes emotionally leaving the room. The deck may improve faster if the player waits three seconds.",
+        "diagnosis": "Reflection skipped.",
+        "intervention": "After a loss, change nothing until you can name why it happened.",
+    },
+    {
+        "title": "Bridge Pressure Romantic",
+        "summary": "You believe in pressure, tempo, and sending the same idea back over the bridge until reality apologizes. Reality has not yet apologized.",
+        "diagnosis": "Commitment is high. Adjustment is pending.",
+        "intervention": "When pressure fails twice, stop calling it pressure and start calling it evidence.",
+    },
+    {
+        "title": "Statistical Main Character",
+        "summary": "Your favourite card has become the emotional centre of the report. It is not necessarily wrong to trust {main_card}; it is wrong to ignore the receipts when trust becomes expensive.",
+        "diagnosis": "Mascot influence detected.",
+        "intervention": "Let the win rate participate in roster decisions.",
+    },
+    {
+        "title": "Counterplay Auditor",
+        "summary": "The report found a recurring opponent pattern and the deck response looks underprepared. This is not fate. This is a missing answer wearing a costume.",
+        "diagnosis": "Matchup preparation incomplete.",
+        "intervention": "Add one answer to {trauma_card} before blaming the queue.",
+    },
+    {
+        "title": "Moderately Haunted Deck Builder",
+        "summary": "Your deck is not random, but it is haunted by old decisions. Some cards look like they solved a problem from three metas ago and never left the apartment.",
+        "diagnosis": "Legacy choices need review.",
+        "intervention": "Ask every card what problem it solves today.",
+    },
+    {
+        "title": "Ladder Incident Coordinator",
+        "summary": "The recent sample contains enough small incidents to form a pattern. Nothing here knows your real personality; it only knows your deck keeps producing paperwork.",
+        "diagnosis": "Pattern density rising.",
+        "intervention": "Fix the biggest contributor to the Fraud Score first.",
+    },
+    {
+        "title": "Defensive Hope Strategist",
+        "summary": "You defend with conviction until the wrong card appears, then the strategy becomes hoping the tower can process grief. The report recommends a more formal airspace policy.",
+        "diagnosis": "Defensive coverage uneven.",
+        "intervention": "Add reliable coverage before the matchup adds crowns.",
+    },
+    {
+        "title": "Tactical Soup Enthusiast",
+        "summary": "The deck contains several individually valid cards, but the shared business model is unclear. Everyone came to work; nobody knows the company mission.",
+        "diagnosis": "Identity requires alignment.",
+        "intervention": "Cut the card that contributes least to the main plan.",
+    },
+    {
+        "title": "Evidence With A Crown",
+        "summary": "Your recent battle log is doing comedy, but it is doing it with numbers. The jokes are attached to deck choices, matchup patterns, and outcomes, not to real-world traits.",
+        "diagnosis": "Entertainment-grade evidence.",
+        "intervention": "Respect the joke metric just enough to fix one thing.",
+    },
+    {
+        "title": "Small Sample Survivor",
+        "summary": "The report found patterns, but some claims remain sample-size limited. You may be improving, unlucky, or simply between incidents. The dashboard will not pretend certainty it does not have.",
+        "diagnosis": "Confidence moderated by sample size.",
+        "intervention": "Play more matches before making a dramatic conclusion.",
+    },
+    {
+        "title": "Upgrade Era Realist",
+        "summary": "Your cards, deck identity, and matchup history are all in the same room, and they are having an honest conversation. The good news is the problem is visible. The bad news is so is the evidence.",
+        "diagnosis": "Visible pattern, fixable problem.",
+        "intervention": "Let the evidence pick the next deck change.",
+    },
+]
+
+TRAIT_VALUES = {
+    "conflict_style": [
+        "Expensive panic response",
+        "Bridge pressure and denial",
+        "Defend first, explain later",
+        "One-card leadership model",
+        "Queue again and hope",
+    ],
+    "coping": [
+        "Blame matchup, queue again",
+        "Replace everything after one loss",
+        "Trust favourite card through paperwork",
+        "Call it unlucky until proven otherwise",
+        "Turn every loss into deck architecture",
+    ],
+    "identity": [
+        "Loyal to mistakes",
+        "High confidence, unclear plan",
+        "Vibes and elixir",
+        "A main character with seven coworkers",
+        "Evidence-based stubbornness",
+    ],
+    "risk": [
+        "Comfort picks over hard counters",
+        "Level advantage optimism",
+        "Late-game paperwork",
+        "Recurring matchup exposure",
+        "Readable but stubborn",
+    ],
+}
+
+GOBLIN_INTERVENTIONS = [
+    "Try losing one match without rebuilding your entire identity.",
+    "Touch grass and stop blaming the first card that annoyed you.",
+    "Your next upgrade should be self-awareness.",
+    "Consider defending air units before they reach your tower.",
+    "Commit to one plan before committing eight cards.",
+    "Try removing the comfort card before it unionizes.",
+    "Stop queueing into the same problem with a fake mustache.",
+    "Give the deck adult supervision for three matches.",
+]
+

@@ -11,6 +11,8 @@ export interface Roast {
   rule_id: string;
   title: string;
   text: string;
+  funny_description?: string;
+  plain_language_explanation?: string;
   evidence: string[];
   confidence: Confidence;
   relevant_cards: string[];
@@ -51,6 +53,15 @@ export interface Report {
     emotional_support_card: Record<string, any>;
     main_character: Record<string, any>;
   };
+  deck_personality: {
+    title: string;
+    style: string;
+    plain_explanation: string;
+    roast: string;
+    traits: Array<{ label: string; explanation: string }>;
+    evidence: string[];
+    confidence: Confidence;
+  };
   matchup_analysis: {
     traumatic_cards: Array<{ card: string; faced: number; losses: number; wins: number; win_rate_against: number; loss_rate: number; confidence: Confidence }>;
     who_hurt_you: { card: string; faced: number; losses: number; win_rate_against: number; confidence: Confidence } | null;
@@ -86,13 +97,34 @@ export interface Report {
     three_crown_wins: number;
   };
   divorce_recommendation: Record<string, any>;
+  fraud_score: {
+    score: number;
+    tier: string;
+    tier_key: string;
+    tier_description: string;
+    headline_roast: string;
+    confidence: Confidence;
+    contributors: Array<{ label: string; points: number; description: string; evidence: string[]; evidence_count: number; roast: string }>;
+    score_receipts: string[];
+  };
+  personality_report: {
+    section_title: string;
+    title: string;
+    summary: string;
+    traits: Array<{ label: string; value: string }>;
+    diagnosis: string;
+    intervention_tip: string;
+    evidence: string[];
+    confidence: Confidence;
+    scope_note: string;
+  };
   roast_report: {
     title: string;
     troll_score: number;
     score_label: string;
     headline_roast: string;
     evidence: string[];
-    score_breakdown: Array<{ label: string; points: number }>;
+    score_breakdown: Array<{ label: string; points: number; description?: string; evidence?: string[]; roast?: string }>;
   };
   roasts: Roast[];
   disclaimer: string;
@@ -105,5 +137,6 @@ export interface Card {
   type: string;
   rarity: string;
   traits: string[];
+  icon_url?: string | null;
+  iconUrls?: { medium?: string; evolutionMedium?: string };
 }
-

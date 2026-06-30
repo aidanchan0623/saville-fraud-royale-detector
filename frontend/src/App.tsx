@@ -5,7 +5,6 @@ import {
   Copy,
   Crown,
   Download,
-  Flame,
   ReceiptText,
   RotateCcw,
   Search,
@@ -20,10 +19,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
   Legend,
-  Pie,
-  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -31,12 +27,6 @@ import {
 } from "recharts";
 import { getDemoVictims, getReport } from "./lib/api";
 import type { Card, DemoVictim, Report, Roast } from "./types";
-
-const resultColors: Record<string, string> = {
-  Wins: "#4ade80",
-  Losses: "#fb7185",
-  Draws: "#60a5fa",
-};
 
 function initials(name: string) {
   return name
@@ -149,14 +139,25 @@ function Section({ title, icon, children }: { title: string; icon: ReactNode; ch
 
 function CardToken({ card }: { card: Card | string }) {
   const name = typeof card === "string" ? card : card.name;
+  const iconUrl = typeof card === "string" ? "" : card.icon_url ?? card.iconUrls?.medium ?? "";
   return (
-    <div className="flex min-w-0 items-center gap-2 rounded-lg border border-white/10 bg-slate-950/50 p-2">
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-amber-300 via-sky-300 to-rose-400 text-[11px] font-black text-slate-950">
-        {initials(name)}
-      </div>
+    <div className="flex min-w-0 items-center gap-3 rounded-lg border border-white/10 bg-slate-950/55 p-2.5">
+      {iconUrl ? (
+        <img src={iconUrl} alt="" className="h-11 w-11 shrink-0 rounded-md object-contain" loading="lazy" />
+      ) : (
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-amber-300/25 bg-amber-300/10 text-[11px] font-black text-amber-100">
+          {initials(name)}
+        </div>
+      )}
       <div className="min-w-0">
         <div className="truncate text-sm font-extrabold text-white">{name}</div>
-        {typeof card !== "string" && <div className="text-xs text-white/50">{card.elixir} elixir - {card.type}</div>}
+        {typeof card !== "string" && (
+          <div className="mt-1 flex flex-wrap gap-1 text-[11px] font-bold uppercase text-white/55">
+            <span>{card.elixir} elixir</span>
+            <span>-</span>
+            <span>{card.type}</span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -333,113 +334,151 @@ function Landing({
 }
 
 function ReportDashboard({ report, onReset }: { report: Report; onReset: () => void }) {
-  const pieData = useMemo(
-    () => [
-      { name: "Wins", value: report.battle_summary.wins },
-      { name: "Losses", value: report.battle_summary.losses },
-      { name: "Draws", value: report.battle_summary.draws },
-    ],
-    [report],
-  );
-  const traumaData = report.matchup_analysis.traumatic_cards.slice(0, 7).map((item) => ({
+  const traumaData = report.matchup_analysis.traumatic_cards.slice(0, 6).map((item) => ({
     card: item.card,
-    winRate: item.win_rate_against,
     lossRate: item.loss_rate,
+    faced: item.faced,
   }));
-  const usedData = report.deck_analysis.most_used_cards.slice(0, 8).map((item) => ({
+  const usedData = report.deck_analysis.most_used_cards.slice(0, 7).map((item) => ({
     card: item.card,
     used: item.used,
     winRate: item.win_rate,
   }));
+  const contributorData = report.fraud_score.contributors.map((item) => ({
+    label: item.label,
+    points: item.points,
+  }));
   const levelData = [
     {
-      name: "Losses",
+      name: "Loss type",
       Underlevelled: report.level_analysis.loss_counts.underlevelled,
-      Even: report.level_analysis.loss_counts.even,
+      "Even level": report.level_analysis.loss_counts.even,
       Overlevelled: report.level_analysis.loss_counts.overlevelled,
     },
   ];
+  const trendData = report.battle_summary.timeline.slice(0, 12).reverse().map((battle, index) => ({
+    match: index + 1,
+    result: battle.result === "win" ? 1 : battle.result === "loss" ? -1 : 0,
+    crowns: `${battle.playerCrowns}-${battle.opponentCrowns}`,
+  }));
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
-      <section className="relative overflow-hidden border-b border-white/10 bg-[linear-gradient(135deg,#0f172a,#172554_42%,#4c0519)]">
-        <div className="absolute inset-0 opacity-35 [background-image:linear-gradient(rgba(255,255,255,.08)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.08)_1px,transparent_1px)] [background-size:42px_42px]" />
-        <div className="relative mx-auto grid max-w-7xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[1.1fr_.9fr] lg:px-8">
-          <div>
-            <div className="mb-4 inline-flex items-center gap-2 rounded-lg border border-amber-300/30 bg-amber-300/10 px-3 py-2 text-sm font-black uppercase text-amber-100">
-              <Crown size={16} /> Player Report
+      <section className="relative overflow-hidden border-b border-white/10 bg-[linear-gradient(135deg,#0f172a,#172554_48%,#3f0b1c)]">
+        <div className="absolute inset-0 opacity-30 [background-image:linear-gradient(rgba(255,255,255,.08)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.08)_1px,transparent_1px)] [background-size:44px_44px]" />
+        <div className="relative mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+          <div className="flex flex-wrap items-start justify-between gap-6">
+            <div>
+              <div className="mb-4 inline-flex items-center gap-2 rounded-lg border border-amber-300/30 bg-amber-300/10 px-3 py-2 text-sm font-black uppercase text-amber-100">
+                <Crown size={16} /> Hero Verdict
+              </div>
+              <h1 className="text-4xl font-black uppercase leading-tight sm:text-6xl">{report.player_summary.name}</h1>
+              <div className="mt-4 flex flex-wrap gap-2 text-sm font-bold text-white/70">
+                <span>{report.player_summary.tag}</span><span>-</span>
+                <span>{report.player_summary.arena}</span><span>-</span>
+                <span>{report.player_summary.clan}</span>
+              </div>
             </div>
-            <h1 className="text-4xl font-black uppercase leading-tight sm:text-6xl">{report.player_summary.name}</h1>
-            <div className="mt-4 flex flex-wrap gap-2 text-sm font-bold text-white/70">
-              <span>{report.player_summary.tag}</span>
-              <span>-</span>
-              <span>{report.player_summary.arena}</span>
-              <span>-</span>
-              <span>{report.player_summary.clan}</span>
-            </div>
-            <div className="mt-7 grid gap-3 sm:grid-cols-4">
-              <Metric label="Trophies" value={report.player_summary.trophies} tone="gold" />
-              <Metric label="Level" value={report.player_summary.player_level} tone="blue" />
-              <Metric label="Battles" value={report.player_summary.battles_analysed} tone="green" />
-              <Metric label="Win Rate" value={`${report.battle_summary.win_rate}%`} tone={report.battle_summary.win_rate >= 50 ? "green" : "red"} />
+            <div className="flex flex-wrap gap-3">
+              <Button onClick={() => shareReport(report)} variant="ghost"><Share2 size={17} /> Share</Button>
+              <Button onClick={() => copyText(report.fraud_score.headline_roast)} variant="ghost"><Copy size={17} /> Copy Roast</Button>
+              <Button onClick={() => downloadSummary(report)} variant="ghost"><Download size={17} /> Download</Button>
+              <Button onClick={onReset} variant="danger"><RotateCcw size={17} /> Another Player</Button>
             </div>
           </div>
 
-          <div className="rounded-lg border border-amber-300/25 bg-slate-950/75 p-5 shadow-glow">
-            <div className="text-xs font-black uppercase text-amber-200">Title</div>
-            <h2 className="mt-2 text-3xl font-black uppercase leading-tight text-white">{report.roast_report.title}</h2>
-            <div className="mt-6 flex items-end gap-4">
-              <div className="text-7xl font-black text-rose-300">{report.roast_report.troll_score}</div>
-              <div className="pb-3 text-2xl font-black text-white/60">/ 100</div>
+          <div className="mt-8 grid gap-6 lg:grid-cols-[.95fr_1.05fr]">
+            <div className="rounded-lg border border-white/10 bg-slate-950/70 p-5">
+              <div className="text-xs font-black uppercase text-white/50">Verdict</div>
+              <h2 className="mt-2 text-3xl font-black uppercase leading-tight text-white">{report.personality_report.title}</h2>
+              <p className="mt-4 text-lg font-semibold leading-8 text-white/80">{report.personality_report.summary}</p>
+              <Evidence evidence={report.personality_report.evidence} />
             </div>
-            <div className="mt-3 h-3 overflow-hidden rounded-full bg-white/10">
-              <div className="h-full bg-gradient-to-r from-emerald-300 via-amber-300 to-rose-400" style={{ width: `${report.roast_report.troll_score}%` }} />
-            </div>
-            <p className="mt-5 text-lg font-semibold leading-7 text-white/80">"{report.roast_report.headline_roast}"</p>
-            <Evidence evidence={report.roast_report.evidence} />
-            <div className="mt-5 flex flex-wrap gap-3">
-              <Button onClick={() => shareReport(report)} variant="ghost"><Share2 size={17} /> Share</Button>
-              <Button onClick={() => copyText(report.roast_report.headline_roast)} variant="ghost"><Copy size={17} /> Copy Roast</Button>
-              <Button onClick={() => downloadSummary(report)} variant="ghost"><Download size={17} /> Download Image</Button>
-              <Button onClick={onReset} variant="danger"><RotateCcw size={17} /> Expose Another</Button>
+
+            <div className="rounded-lg border border-amber-300/30 bg-slate-950/80 p-6 shadow-glow">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <div className="text-xs font-black uppercase text-amber-200">Fraud Score</div>
+                  <div className="mt-2 text-7xl font-black leading-none text-rose-300 sm:text-8xl">{report.fraud_score.score}<span className="text-3xl text-white/55">/100</span></div>
+                </div>
+                <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-right">
+                  <div className="text-xs font-black uppercase text-white/50">Confidence</div>
+                  <div className="text-lg font-black uppercase text-emerald-200">{report.fraud_score.confidence}</div>
+                </div>
+              </div>
+              <div className="mt-5 h-4 overflow-hidden rounded-full bg-white/10">
+                <div className="h-full bg-gradient-to-r from-emerald-300 via-amber-300 to-rose-400" style={{ width: `${report.fraud_score.score}%` }} />
+              </div>
+              <h3 className="mt-5 text-3xl font-black uppercase text-white">{report.fraud_score.tier}</h3>
+              <p className="mt-2 text-sm font-semibold leading-6 text-white/70">{report.fraud_score.tier_description}</p>
+              <p className="mt-4 text-xl font-black leading-8 text-amber-100">"{report.fraud_score.headline_roast}"</p>
+              <div className="mt-5 space-y-3">
+                {report.fraud_score.contributors.slice(0, 5).map((item) => (
+                  <div key={item.label} className="rounded-lg border border-white/10 bg-white/5 p-3">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="font-black text-white">{item.label}</div>
+                      <div className="text-lg font-black text-rose-300">+{item.points}</div>
+                    </div>
+                    <p className="mt-1 text-sm font-semibold leading-6 text-white/60">{item.description}</p>
+                  </div>
+                ))}
+              </div>
+              <details className="mt-5 rounded-lg border border-amber-300/25 bg-amber-300/10 p-3">
+                <summary className="cursor-pointer text-sm font-black uppercase text-amber-100">Show Score Receipts</summary>
+                <ul className="mt-3 space-y-2 text-sm text-amber-50/80">
+                  {report.fraud_score.score_receipts.map((item) => <li key={item}>- {item}</li>)}
+                </ul>
+              </details>
             </div>
           </div>
         </div>
       </section>
 
-      <Section title="Immediate Roast" icon={<Flame size={20} />}>
-        <div className="grid gap-4 lg:grid-cols-2">
-          {report.roasts.slice(0, 4).map((roast) => <RoastPanel key={`${roast.rule_id}-${roast.title}`} roast={roast} />)}
-        </div>
-      </Section>
-
-      <Section title="Battle Summary" icon={<Swords size={20} />}>
-        <div className="grid gap-4 lg:grid-cols-[.85fr_1.15fr]">
-          <div className="rounded-lg border border-white/10 bg-white/5 p-4">
-            <ResponsiveContainer width="100%" height={260}>
-              <PieChart>
-                <Pie data={pieData} dataKey="value" nameKey="name" innerRadius={70} outerRadius={104} paddingAngle={4}>
-                  {pieData.map((entry) => <Cell key={entry.name} fill={resultColors[entry.name]} />)}
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
+      <Section title={report.personality_report.section_title} icon={<Sparkles size={20} />}>
+        <div className="grid gap-5 lg:grid-cols-[1.1fr_.9fr]">
+          <div className="rounded-lg border border-white/10 bg-white/5 p-5">
+            <div className="text-xs font-black uppercase text-white/50">Overall Personality Summary</div>
+            <h2 className="mt-2 text-3xl font-black uppercase text-white">{report.personality_report.title}</h2>
+            <p className="mt-4 text-lg font-semibold leading-8 text-white/80">{report.personality_report.summary}</p>
+            <div className="mt-5 rounded-lg border border-sky-300/20 bg-sky-400/10 p-4">
+              <div className="text-sm font-black uppercase text-sky-100">Final Diagnosis</div>
+              <p className="mt-2 text-xl font-black text-white">{report.personality_report.diagnosis}</p>
+              <p className="mt-3 text-sm font-semibold leading-6 text-sky-50/80">{report.personality_report.scope_note}</p>
+            </div>
           </div>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Metric label="Wins" value={report.battle_summary.wins} tone="green" />
-            <Metric label="Losses" value={report.battle_summary.losses} tone="red" />
-            <Metric label="Draws" value={report.battle_summary.draws} tone="blue" />
-            <Metric label="3-Crown Wins" value={report.battle_summary.three_crown_wins} tone="gold" />
-            <Metric label="3-Crown Losses" value={report.battle_summary.three_crown_losses} tone="red" />
-            <Metric label="Current Streak" value={`${report.battle_summary.current_streak.count} ${report.battle_summary.current_streak.type}`} tone="blue" />
+          <div className="space-y-3">
+            {report.personality_report.traits.map((trait) => (
+              <div key={trait.label} className="rounded-lg border border-white/10 bg-slate-950/60 p-4">
+                <div className="text-xs font-black uppercase text-white/50">{trait.label}</div>
+                <div className="mt-2 text-xl font-black text-white">{trait.value}</div>
+              </div>
+            ))}
+            <div className="rounded-lg border border-amber-300/25 bg-amber-300/10 p-4">
+              <div className="text-xs font-black uppercase text-amber-100">Recommended Intervention</div>
+              <p className="mt-2 text-lg font-black leading-7 text-white">{report.personality_report.intervention_tip}</p>
+            </div>
           </div>
         </div>
       </Section>
 
       <Section title="Deck Personality" icon={<BadgeAlert size={20} />}>
-        <div className="grid gap-5 lg:grid-cols-[1fr_.9fr]">
-          <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+        <div className="grid gap-5 lg:grid-cols-[.92fr_1.08fr]">
+          <div className="rounded-lg border border-white/10 bg-white/5 p-5">
+            <div className="text-xs font-black uppercase text-white/50">Deck Style Estimate</div>
+            <h2 className="mt-2 text-4xl font-black uppercase text-white">{report.deck_personality.title}</h2>
+            <p className="mt-4 text-base font-semibold leading-7 text-white/70">{report.deck_personality.plain_explanation}</p>
+            <p className="mt-4 rounded-lg border border-rose-300/20 bg-rose-400/10 p-4 text-lg font-black leading-7 text-rose-50">"{report.deck_personality.roast}"</p>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              {report.deck_personality.traits.map((trait) => (
+                <div key={trait.label} className="rounded-lg border border-white/10 bg-slate-950/60 p-3">
+                  <div className="font-black text-white">{trait.label}</div>
+                  <p className="mt-1 text-sm font-semibold leading-6 text-white/60">{trait.explanation}</p>
+                </div>
+              ))}
+            </div>
+            <Evidence evidence={report.deck_personality.evidence} />
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/5 p-5">
             <div className="grid gap-3 sm:grid-cols-4">
               <Metric label="Avg Elixir" value={report.deck_analysis.average_elixir} tone="gold" />
               <Metric label="Troops" value={report.deck_analysis.composition.troops} tone="blue" />
@@ -448,26 +487,6 @@ function ReportDashboard({ report, onReset }: { report: Report; onReset: () => v
             </div>
             <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
               {report.deck_analysis.current_deck.map((card) => <CardToken key={card.name} card={card} />)}
-            </div>
-          </div>
-          <div className="rounded-lg border border-white/10 bg-white/5 p-4">
-            <div className="text-xs font-black uppercase text-white/50">Deck Style Estimate</div>
-            <div className="mt-2 text-3xl font-black uppercase text-white">{report.deck_analysis.estimated_deck_style}</div>
-            <div className="mt-5 text-sm font-bold uppercase text-white/50">Deck Identity Score</div>
-            <div className="mt-2 h-3 overflow-hidden rounded-full bg-white/10">
-              <div className="h-full bg-gradient-to-r from-rose-400 via-amber-300 to-emerald-300" style={{ width: `${report.deck_analysis.deck_identity_score}%` }} />
-            </div>
-            <div className="mt-2 text-2xl font-black text-white">{report.deck_analysis.deck_identity_score}/100</div>
-            <div className="mt-6">
-              <ResponsiveContainer width="100%" height={240}>
-                <BarChart data={usedData} layout="vertical" margin={{ left: 12, right: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.08)" />
-                  <XAxis type="number" stroke="#94a3b8" />
-                  <YAxis dataKey="card" type="category" width={110} stroke="#94a3b8" tick={{ fontSize: 11 }} />
-                  <Tooltip />
-                  <Bar dataKey="used" fill="#facc15" radius={[0, 6, 6, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
             </div>
           </div>
         </div>
@@ -482,71 +501,30 @@ function ReportDashboard({ report, onReset }: { report: Report; onReset: () => v
               <div className="mt-5 grid gap-3 sm:grid-cols-2">
                 <Metric label="Faced" value={report.matchup_analysis.who_hurt_you.faced} tone="blue" />
                 <Metric label="Lost" value={report.matchup_analysis.who_hurt_you.losses} tone="red" />
-                <Metric label="Win Rate" value={`${report.matchup_analysis.who_hurt_you.win_rate_against}%`} tone="gold" />
+                <Metric label="Win Rate Against" value={`${report.matchup_analysis.who_hurt_you.win_rate_against}%`} tone="gold" />
                 <Metric label="Confidence" value={report.matchup_analysis.who_hurt_you.confidence} tone="green" />
               </div>
             )}
             <div className="mt-6 border-t border-white/10 pt-5">
               <div className="text-xs font-black uppercase text-sky-200">Natural Predator</div>
               <div className="mt-2 text-2xl font-black uppercase text-white">{report.matchup_analysis.natural_predator.label}</div>
+              <p className="mt-2 text-sm font-semibold leading-6 text-white/60">Lost {report.matchup_analysis.natural_predator.losses} of {report.matchup_analysis.natural_predator.matches} recent battles against this detected card core.</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {report.matchup_analysis.natural_predator.core_cards.map((card) => <CardToken key={card} card={card} />)}
               </div>
             </div>
           </div>
-          <div className="rounded-lg border border-white/10 bg-white/5 p-4">
-            <ResponsiveContainer width="100%" height={360}>
-              <BarChart data={traumaData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.08)" />
-                <XAxis dataKey="card" stroke="#94a3b8" tick={{ fontSize: 11 }} interval={0} angle={-15} textAnchor="end" height={76} />
-                <YAxis stroke="#94a3b8" />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="lossRate" name="Loss rate" fill="#fb7185" radius={[6, 6, 0, 0]} />
-                <Bar dataKey="winRate" name="Win rate" fill="#38bdf8" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </Section>
-
-      <Section title="Behaviour Patterns" icon={<Zap size={20} />}>
-        <div className="grid gap-5 lg:grid-cols-3">
-          <div className="rounded-lg border border-white/10 bg-white/5 p-5 lg:col-span-2">
-            <div className="grid gap-3 sm:grid-cols-4">
-              <Metric label="Detector" value={report.behaviour_analysis.title} tone="gold" />
-              <Metric label="Unique Decks" value={report.behaviour_analysis.unique_decks} tone="blue" />
-              <Metric label="After-Loss Changes" value={report.behaviour_analysis.changes_after_losses} tone="red" />
-              <Metric label="Core Similarity" value={`${report.behaviour_analysis.core_deck_similarity_score}%`} tone="green" />
-            </div>
-            <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              {report.battle_summary.timeline.slice(0, 12).map((battle, index) => (
-                <div key={`${battle.battleTime}-${index}`} className="rounded-lg border border-white/10 bg-slate-950/50 p-3">
-                  <div className={`text-sm font-black uppercase ${battle.result === "win" ? "text-emerald-300" : battle.result === "loss" ? "text-rose-300" : "text-sky-300"}`}>
-                    {battle.result}
-                  </div>
-                  <div className="mt-1 text-xs font-semibold text-white/60">{battle.playerCrowns}-{battle.opponentCrowns}</div>
-                  <div className="mt-2 truncate text-xs text-white/50">{battle.deck.slice(0, 3).join(" / ")}</div>
-                </div>
-              ))}
-            </div>
-          </div>
           <div className="rounded-lg border border-white/10 bg-white/5 p-5">
-            <div className="text-xs font-black uppercase text-white/50">Overlevelled Fraud Score</div>
-            <div className="mt-3 text-6xl font-black text-rose-300">{report.level_analysis.overlevelled_fraud_score}%</div>
-            <div className="mt-2 text-lg font-black uppercase text-white">{report.level_analysis.tier}</div>
-            <div className="mt-6 h-4 overflow-hidden rounded-full bg-white/10">
-              <div className="h-full bg-rose-400" style={{ width: `${report.level_analysis.overlevelled_fraud_score}%` }} />
-            </div>
-            <div className="mt-6 h-44">
+            <h3 className="text-lg font-black uppercase text-white">Opponent cards appearing in losses</h3>
+            <p className="mt-1 text-sm font-semibold text-white/55">Shows which opponent cards appear most often in losses, with sample-size confidence kept visible.</p>
+            <div className="mt-4 h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={levelData} layout="vertical">
-                  <XAxis type="number" hide />
-                  <YAxis type="category" dataKey="name" hide />
+                <BarChart data={traumaData} layout="vertical" margin={{ left: 18, right: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.08)" />
+                  <XAxis type="number" stroke="#94a3b8" />
+                  <YAxis dataKey="card" type="category" width={120} stroke="#94a3b8" tick={{ fontSize: 11 }} />
                   <Tooltip />
-                  <Bar dataKey="Underlevelled" stackId="a" fill="#60a5fa" />
-                  <Bar dataKey="Even" stackId="a" fill="#facc15" />
-                  <Bar dataKey="Overlevelled" stackId="a" fill="#fb7185" />
+                  <Bar dataKey="lossRate" name="Loss rate %" fill="#fb7185" radius={[0, 6, 6, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -554,28 +532,116 @@ function ReportDashboard({ report, onReset }: { report: Report; onReset: () => v
         </div>
       </Section>
 
-      <Section title="Final Verdict" icon={<Trophy size={20} />}>
-        <div className="grid gap-5 lg:grid-cols-[.8fr_1.2fr]">
+      <Section title="Behaviour Patterns" icon={<Zap size={20} />}>
+        <div className="grid gap-5 lg:grid-cols-[1.1fr_.9fr]">
           <div className="rounded-lg border border-white/10 bg-white/5 p-5">
-            <div className="text-xs font-black uppercase text-white/50">Score Breakdown</div>
-            <div className="mt-4 space-y-3">
-              {report.roast_report.score_breakdown.map((item) => (
-                <div key={item.label}>
-                  <div className="mb-1 flex items-center justify-between gap-3 text-sm font-bold text-white/78">
-                    <span>{item.label}</span>
-                    <span>+{item.points}</span>
-                  </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-white/10">
-                    <div className="h-full bg-amber-300" style={{ width: `${Math.min(100, item.points * 6)}%` }} />
-                  </div>
-                </div>
-              ))}
+            <h3 className="text-2xl font-black uppercase text-white">{report.behaviour_analysis.title}</h3>
+            <p className="mt-2 text-sm font-semibold leading-6 text-white/60">Deck-change behaviour is measured by comparing sequential battle decks. A panic switch means at least three cards changed after a loss.</p>
+            <div className="mt-5 grid gap-3 sm:grid-cols-4">
+              <Metric label="Unique Decks" value={report.behaviour_analysis.unique_decks} tone="blue" />
+              <Metric label="Post-Loss Changes" value={report.behaviour_analysis.changes_after_losses} tone="red" />
+              <Metric label="Main Deck WR" value={`${report.behaviour_analysis.main_deck_win_rate}%`} tone="gold" />
+              <Metric label="Core Similarity" value={`${report.behaviour_analysis.core_deck_similarity_score}%`} tone="green" />
             </div>
-            <p className="mt-6 text-sm font-semibold leading-6 text-white/60">{report.disclaimer}</p>
+            <Evidence evidence={report.behaviour_analysis.evidence} />
           </div>
-          <div className="grid gap-4 lg:grid-cols-2">
-            {report.roasts.slice(4).map((roast) => <RoastPanel key={`${roast.rule_id}-${roast.title}`} roast={roast} />)}
+          <div className="rounded-lg border border-white/10 bg-white/5 p-5">
+            <div className="text-xs font-black uppercase text-white/50">Overlevelled Fraud Score</div>
+            <div className="mt-2 text-6xl font-black text-rose-300">{report.level_analysis.overlevelled_fraud_score}%</div>
+            <div className="mt-2 text-lg font-black uppercase text-white">{report.level_analysis.tier}</div>
+            <p className="mt-3 text-sm font-semibold leading-6 text-white/60">Measures losses where your average card level was materially higher than the opponent's. It is a joke metric, not proof that you are actually bad.</p>
+            <div className="mt-5 h-4 overflow-hidden rounded-full bg-white/10">
+              <div className="h-full bg-rose-400" style={{ width: `${report.level_analysis.overlevelled_fraud_score}%` }} />
+            </div>
           </div>
+        </div>
+      </Section>
+
+      <Section title="Supporting Evidence" icon={<Swords size={20} />}>
+        <div className="grid gap-5 lg:grid-cols-3">
+          <div className="rounded-lg border border-white/10 bg-white/5 p-5">
+            <h3 className="text-lg font-black uppercase text-white">Fraud Score Contributors</h3>
+            <p className="mt-1 text-sm font-semibold text-white/55">Shows which rule-based factors added the most to the total Fraud Score.</p>
+            <div className="mt-4 h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={contributorData} layout="vertical" margin={{ left: 18, right: 20 }}>
+                  <XAxis type="number" stroke="#94a3b8" />
+                  <YAxis dataKey="label" type="category" width={122} stroke="#94a3b8" tick={{ fontSize: 10 }} />
+                  <Tooltip />
+                  <Bar dataKey="points" fill="#facc15" radius={[0, 6, 6, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/5 p-5">
+            <h3 className="text-lg font-black uppercase text-white">Loss Type Breakdown</h3>
+            <p className="mt-1 text-sm font-semibold text-white/55">Shows whether level disadvantage explains losses, or whether the cards did their part and the result still went sideways.</p>
+            <div className="mt-4 h-52">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={levelData} layout="vertical">
+                  <XAxis type="number" stroke="#94a3b8" />
+                  <YAxis type="category" dataKey="name" width={70} stroke="#94a3b8" />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="Underlevelled" stackId="a" fill="#60a5fa" />
+                  <Bar dataKey="Even level" stackId="a" fill="#facc15" />
+                  <Bar dataKey="Overlevelled" stackId="a" fill="#fb7185" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/5 p-5">
+            <h3 className="text-lg font-black uppercase text-white">Most-Used Cards</h3>
+            <p className="mt-1 text-sm font-semibold text-white/55">Shows which cards appear most in recent player decks and whether they are returning value.</p>
+            <div className="mt-4 h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={usedData} layout="vertical" margin={{ left: 18, right: 20 }}>
+                  <XAxis type="number" stroke="#94a3b8" />
+                  <YAxis dataKey="card" type="category" width={100} stroke="#94a3b8" tick={{ fontSize: 10 }} />
+                  <Tooltip />
+                  <Bar dataKey="used" fill="#38bdf8" radius={[0, 6, 6, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+        <div className="mt-5 rounded-lg border border-white/10 bg-white/5 p-5">
+          <h3 className="text-lg font-black uppercase text-white">Recent Match Trend</h3>
+          <p className="mt-1 text-sm font-semibold text-white/55">Win is +1, draw is 0, loss is -1. This keeps the trend readable without pretending to know replay details.</p>
+          <div className="mt-4 grid gap-2 sm:grid-cols-6 lg:grid-cols-12">
+            {trendData.map((battle) => (
+              <div key={battle.match} className={`rounded-lg border p-3 text-center ${battle.result > 0 ? "border-emerald-300/25 bg-emerald-300/10" : battle.result < 0 ? "border-rose-300/25 bg-rose-400/10" : "border-sky-300/25 bg-sky-400/10"}`}>
+                <div className="text-xs font-black uppercase text-white/50">#{battle.match}</div>
+                <div className="mt-1 text-sm font-black text-white">{battle.result > 0 ? "Win" : battle.result < 0 ? "Loss" : "Draw"}</div>
+                <div className="mt-1 text-xs font-semibold text-white/55">{battle.crowns}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Final Verdict" icon={<Trophy size={20} />}>
+        <div className="rounded-lg border border-amber-300/25 bg-[linear-gradient(135deg,rgba(15,23,42,.92),rgba(76,5,25,.64))] p-6 shadow-glow">
+          <div className="grid gap-6 lg:grid-cols-[1fr_.9fr]">
+            <div>
+              <div className="text-xs font-black uppercase text-amber-100">Final Verdict</div>
+              <h2 className="mt-2 text-4xl font-black uppercase leading-tight text-white">{report.fraud_score.tier}</h2>
+              <p className="mt-4 text-xl font-black leading-8 text-amber-50">"{report.fraud_score.headline_roast}"</p>
+              <p className="mt-4 text-sm font-semibold leading-6 text-white/60">{report.disclaimer}</p>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-slate-950/60 p-5">
+              <div className="text-xs font-black uppercase text-white/50">Recommended Intervention</div>
+              <p className="mt-2 text-2xl font-black leading-8 text-white">{report.personality_report.intervention_tip}</p>
+              <div className="mt-5 text-xs font-black uppercase text-white/50">Most Damning Evidence</div>
+              <ul className="mt-3 space-y-2 text-sm font-semibold text-white/70">
+                {report.fraud_score.contributors.slice(0, 3).map((item) => <li key={item.label}>+{item.points}: {item.label}</li>)}
+              </ul>
+              <Evidence evidence={report.fraud_score.score_receipts} />
+            </div>
+          </div>
+        </div>
+        <div className="mt-5 grid gap-4 lg:grid-cols-2">
+          {report.roasts.slice(0, 4).map((roast) => <RoastPanel key={`${roast.rule_id}-${roast.title}`} roast={roast} />)}
         </div>
       </Section>
     </main>

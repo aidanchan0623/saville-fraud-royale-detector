@@ -7,8 +7,12 @@ from typing import Any
 from urllib.parse import unquote
 
 from app.rules.behaviour_rules import choose_behaviour_title
+from app.rules.deck_templates import DECK_STYLE_COPY, TRAIT_EXPLANATIONS
 from app.rules.deck_rules import choose_deck_personality, deck_identity_score, estimate_deck_style
+from app.rules.expression_selector import ExpressionSelector, format_template
+from app.rules.fraud_score_templates import CONTRIBUTOR_COPY, TIER_COPY
 from app.rules.matchup_rules import label_opponent_core, most_common_loss_core
+from app.rules.personality_templates import GOBLIN_INTERVENTIONS, PERSONALITY_TEMPLATES, SECTION_TITLES, TRAIT_VALUES
 from app.services.card_data_service import CardDataService, get_card_service
 from app.services.roast_engine import RoastEngine
 
@@ -29,6 +33,25 @@ def cards_from_side(side: dict[str, Any]) -> list[dict[str, Any]]:
 
 def deck_names(deck: list[dict[str, Any] | str]) -> list[str]:
     return [card_name(card) for card in deck]
+
+
+def unique_ordered(values: list[str]) -> list[str]:
+    return list(dict.fromkeys(values))
+
+
+def enrich_card(card: dict[str, Any], card_service: CardDataService | None = None) -> dict[str, Any]:
+    service = card_service or get_card_service()
+    metadata = service.get(card.get("name", ""))
+    icon_urls = card.get("iconUrls") if isinstance(card.get("iconUrls"), dict) else {}
+    return {
+        **metadata,
+        **card,
+        "elixir": card.get("elixir", metadata.get("elixir", 4)),
+        "type": card.get("type", metadata.get("type", "troop")),
+        "rarity": card.get("rarity", metadata.get("rarity", "common")),
+        "traits": card.get("traits") or metadata.get("traits", []),
+        "icon_url": icon_urls.get("medium") or icon_urls.get("evolutionMedium"),
+    }
 
 
 def deck_signature(deck: list[dict[str, Any] | str]) -> str:
@@ -210,7 +233,7 @@ def rank_traumatic_opponent_cards(player_tag: str, battles: list[dict[str, Any]]
     for battle in battles:
         _, opponent_side = player_and_opponent(player_tag, battle)
         result = battle_result(player_tag, battle)
-        for name in set(deck_names(cards_from_side(opponent_side))):
+        for name in unique_ordered(deck_names(cards_from_side(opponent_side))):
             stats[name]["faced"] += 1
             stats[name][result_bucket(result)] += 1
 
@@ -383,6 +406,7 @@ def analyse_matchups(player_tag: str, battles: list[dict[str, Any]]) -> dict[str
 
 def analyse_deck(player: dict[str, Any], player_tag: str, battles: list[dict[str, Any]], card_service: CardDataService) -> dict[str, Any]:
     current_deck = player.get("currentDeck") or cards_from_side(player_and_opponent(player_tag, battles[0])[0])
+    current_deck = [enrich_card(card, card_service) for card in current_deck]
     average_elixir = average_deck_elixir(current_deck, card_service)
     type_counts = Counter(card.get("type", "troop") for card in current_deck)
     style = estimate_deck_style(current_deck, average_elixir)
@@ -416,6 +440,46 @@ def analyse_deck(player: dict[str, Any], player_tag: str, battles: list[dict[str
         "deck_identity_score": identity,
         "personality_rule": personality,
     }
+
+
+def detect_deck_traits(deck: list[dict[str, Any]], average_elixir: float, style: str) -> list[dict[str, str]]:
+    traits = Counter()
+    types = Counter(card.get("type", "troop") for card in deck)
+    costs = [float(card.get("elixir", 0)) for card in deck]
+    for card in deck:
+        traits.update(card.get("traits", []))
+
+    labels: list[str] = []
+    if average_elixir >= 4.3:
+        labels.append("High elixir commitment")
+    if traits["anti_air"] <= 1:
+        labels.append("Weak anti-air")
+    if traits["small_spell"] == 0:
+        labels.append("No small spell")
+    if types["building"] > 1:
+        labels.append("Defensive building reliance")
+    if style in {"Random bullshit go", "No coherent archetype detected"}:
+        labels.append("Split identity")
+    if traits["splash"] >= 3:
+        labels.append("Heavy splash dependency")
+    if traits["win_condition"] == 1:
+        labels.append("Single win-condition dependence")
+    if "building_damage" not in traits and "tank_killer" not in traits and traits["win_condition"] <= 1:
+        labels.append("No reliable building answer")
+    if sum(1 for cost in costs if cost >= 5) >= 3:
+        labels.append("Too many expensive cards")
+    if traits["splash"] >= 3 or traits["swarm"] >= 3 or traits["cycle"] >= 4:
+        labels.append("Too many duplicate roles")
+    if types["spell"] == 0:
+        labels.append("No spells")
+    if types["building"] == 0:
+        labels.append("No buildings")
+    if types["troop"] >= 7:
+        labels.append("All-in troop collection")
+
+    if not labels:
+        labels.append("Readable role coverage")
+    return [{"label": label, "explanation": TRAIT_EXPLANATIONS.get(label, "Detected from deck composition.")} for label in labels[:4]]
 
 
 def analyse_main_character(player_tag: str, battles: list[dict[str, Any]]) -> dict[str, Any]:
@@ -553,6 +617,175 @@ def calculate_troll_score(
     return {"score": total, "label": label, "components": components}
 
 
+def fraud_tier_key(score: int) -> str:
+    if score <= 20:
+        return "respectable"
+    if score <= 40:
+        return "mild"
+    if score <= 60:
+        return "questionable"
+    if score <= 80:
+        return "high"
+    return "extreme"
+
+
+def build_fraud_score(
+    troll_score: dict[str, Any],
+    battle_summary: dict[str, Any],
+    deck_analysis: dict[str, Any],
+    matchup_analysis: dict[str, Any],
+    level_analysis: dict[str, Any],
+    behaviour_analysis: dict[str, Any],
+    emotional_support: dict[str, Any],
+    clutch_analysis: dict[str, Any],
+    selector: ExpressionSelector,
+) -> dict[str, Any]:
+    score = int(troll_score["score"])
+    tier_key = fraud_tier_key(score)
+    tier_copy = TIER_COPY[tier_key]
+    tier = selector.choose(tier_copy["labels"], f"fraud:{tier_key}:label")
+    description = selector.choose(tier_copy["descriptions"], f"fraud:{tier_key}:description")
+    headline = selector.choose(tier_copy["headlines"], f"fraud:{tier_key}:headline")
+    contributors = []
+    evidence_map = {
+        "Poor overall win rate": [f"Overall win rate: {battle_summary['win_rate']}%", f"Wins/losses/draws: {battle_summary['wins']}/{battle_summary['losses']}/{battle_summary['draws']}"],
+        "Lost while overlevelled": [f"Overlevelled losses: {level_analysis['loss_counts']['overlevelled']}", f"Overlevelled Fraud Score: {level_analysis['overlevelled_fraud_score']}%"],
+        "Repeated panic deck changes": [f"Major post-loss deck changes: {behaviour_analysis['changes_after_losses']}", f"Unique decks used: {behaviour_analysis['unique_decks']}"],
+        "Emotional support card detected": emotional_support.get("evidence", []),
+        "Deck identity crisis": [f"Deck identity score: {deck_analysis['deck_identity_score']}/100", f"Estimated style: {deck_analysis['estimated_deck_style']}"],
+        "Close-loss ratio": [f"Close losses: {clutch_analysis['close_losses']}", f"Close wins: {clutch_analysis['close_wins']}"],
+        "Three-crown loss ratio": [f"Three-crown losses: {battle_summary['three_crown_losses']}"],
+        "Weak against a recurring matchup": [
+            f"Natural predator: {matchup_analysis['natural_predator']['label']}",
+            f"Lost {matchup_analysis['natural_predator']['losses']} of {matchup_analysis['natural_predator']['matches']} against the recurring core",
+        ],
+        "High elixir with poor results": [f"Average elixir: {deck_analysis['average_elixir']}", f"Win rate: {battle_summary['win_rate']}%"],
+        "Repeated low-performing deck usage": [f"Main deck win rate: {behaviour_analysis['main_deck_win_rate']}%", f"Main deck games: {behaviour_analysis['main_deck_games']}"],
+    }
+    for component in sorted(troll_score["components"], key=lambda item: item["points"], reverse=True):
+        copy = CONTRIBUTOR_COPY.get(component["label"], {"description": "Detected from recent battle-log evidence.", "roasts": ["The evidence is doing quiet paperwork."]})
+        evidence = evidence_map.get(component["label"], [])
+        contributors.append(
+            {
+                "label": component["label"],
+                "points": component["points"],
+                "description": copy["description"],
+                "evidence": evidence,
+                "evidence_count": len(evidence),
+                "roast": selector.choose(copy["roasts"], f"fraud:contributor:{component['label']}"),
+            }
+        )
+    if not contributors:
+        contributors.append(
+            {
+                "label": "Evidence stayed boring",
+                "points": 0,
+                "description": "The recent sample did not produce major fraud-score contributors.",
+                "evidence": ["No major score components crossed the threshold"],
+                "evidence_count": 1,
+                "roast": "The dashboard tried to start drama and the data declined.",
+            }
+        )
+    if battle_summary["battles_analysed"] < 10:
+        confidence = "low"
+    elif len(contributors) >= 4 or battle_summary["battles_analysed"] >= 20:
+        confidence = "high"
+    else:
+        confidence = "medium"
+    return {
+        "score": score,
+        "tier": tier,
+        "tier_key": tier_key,
+        "tier_description": description,
+        "headline_roast": headline,
+        "confidence": confidence,
+        "contributors": contributors[:5],
+        "score_receipts": [evidence for contributor in contributors for evidence in contributor["evidence"]],
+    }
+
+
+def build_deck_personality(deck_analysis: dict[str, Any], selector: ExpressionSelector) -> dict[str, Any]:
+    style = deck_analysis["estimated_deck_style"]
+    copy = DECK_STYLE_COPY.get(style, DECK_STYLE_COPY["Random bullshit go"])
+    traits = detect_deck_traits(deck_analysis["current_deck"], deck_analysis["average_elixir"], style)
+    evidence = list(deck_analysis["personality_rule"].get("evidence", []))
+    evidence.extend([f"{trait['label']}: {trait['explanation']}" for trait in traits])
+    return {
+        "title": "Tactical Soup" if style in {"Random bullshit go", "No coherent archetype detected"} else style,
+        "style": style,
+        "plain_explanation": copy["plain"],
+        "roast": selector.choose(copy["roasts"], f"deck:{style}:roast"),
+        "traits": traits,
+        "evidence": evidence,
+        "confidence": deck_analysis["personality_rule"].get("confidence", "medium"),
+    }
+
+
+def build_personality_report(
+    deck_analysis: dict[str, Any],
+    battle_summary: dict[str, Any],
+    matchup_analysis: dict[str, Any],
+    level_analysis: dict[str, Any],
+    behaviour_analysis: dict[str, Any],
+    emotional_support: dict[str, Any],
+    main_character: dict[str, Any],
+    fraud_score: dict[str, Any],
+    selector: ExpressionSelector,
+    goblin_mode: bool,
+) -> dict[str, Any]:
+    hurt = matchup_analysis.get("who_hurt_you") or {}
+    values = {
+        "main_card": main_character.get("card") or emotional_support.get("card") or "the favourite card",
+        "trauma_card": hurt.get("card") or "that recurring matchup",
+        "deck_style": deck_analysis["estimated_deck_style"],
+        "behaviour_title": behaviour_analysis["title"].lower(),
+        "fraud_tier": fraud_score["tier"],
+    }
+    template = selector.choose(PERSONALITY_TEMPLATES, "personality:summary")
+    traits = [
+        {"label": "Conflict Style", "value": selector.choose(TRAIT_VALUES["conflict_style"], "personality:trait:conflict")},
+        {"label": "Coping Mechanism", "value": selector.choose(TRAIT_VALUES["coping"], "personality:trait:coping")},
+        {"label": "Tactical Identity", "value": selector.choose(TRAIT_VALUES["identity"], "personality:trait:identity")},
+    ]
+    if fraud_score["score"] >= 60:
+        traits.append({"label": "Risk Profile", "value": selector.choose(TRAIT_VALUES["risk"], "personality:trait:risk")})
+    intervention = selector.choose(GOBLIN_INTERVENTIONS, "personality:goblin_intervention") if goblin_mode else template["intervention"]
+    evidence = [
+        f"Fraud Score tier: {fraud_score['tier']}",
+        f"Deck style estimate: {deck_analysis['estimated_deck_style']}",
+        f"Behaviour pattern: {behaviour_analysis['title']}",
+        f"Close-game record: {battle_summary['close_wins']} close wins, {battle_summary['close_losses']} close losses",
+        f"Overlevelled Fraud Score: {level_analysis['overlevelled_fraud_score']}%",
+    ]
+    if emotional_support.get("detected"):
+        evidence.append(f"Emotional support card: {emotional_support['card']}")
+    if main_character:
+        evidence.append(f"Main character card: {main_character.get('card')}")
+    return {
+        "section_title": selector.choose(SECTION_TITLES, "personality:section_title"),
+        "title": template["title"],
+        "summary": format_template(template["summary"], values),
+        "traits": traits[:4],
+        "diagnosis": template["diagnosis"],
+        "intervention_tip": format_template(intervention, values),
+        "evidence": evidence,
+        "confidence": fraud_score["confidence"],
+        "scope_note": "This is a deck personality summary based only on recent battle-log behaviour, not a real psychological diagnosis.",
+    }
+
+
+def dedupe_roasts(roasts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    seen = set()
+    unique = []
+    for roast in roasts:
+        rule_id = roast.get("rule_id")
+        if rule_id in seen:
+            continue
+        seen.add(rule_id)
+        unique.append(roast)
+    return unique
+
+
 @dataclass
 class AnalysisService:
     card_service: CardDataService
@@ -566,6 +799,7 @@ class AnalysisService:
         goblin_mode: bool = False,
     ) -> dict[str, Any]:
         player_tag = player.get("tag", "")
+        selector = ExpressionSelector(seed or player_tag)
         battle_summary = calculate_battle_summary(player_tag, battles)
         deck_analysis = analyse_deck(player, player_tag, battles, self.card_service)
         matchup_analysis = analyse_matchups(player_tag, battles)
@@ -584,12 +818,39 @@ class AnalysisService:
             emotional_support,
             clutch_analysis,
         )
+        fraud_score = build_fraud_score(
+            troll_score,
+            battle_summary,
+            deck_analysis,
+            matchup_analysis,
+            level_analysis,
+            behaviour_analysis,
+            emotional_support,
+            clutch_analysis,
+            selector,
+        )
+        deck_personality = build_deck_personality(deck_analysis, selector)
+        personality_report = build_personality_report(
+            deck_analysis,
+            battle_summary,
+            matchup_analysis,
+            level_analysis,
+            behaviour_analysis,
+            emotional_support,
+            main_character,
+            fraud_score,
+            selector,
+            goblin_mode,
+        )
 
         roasts = []
         roasts.append(
             self.roast_engine.render(
                 **deck_analysis["personality_rule"],
-                metrics={"average_elixir": deck_analysis["average_elixir"]},
+                metrics={
+                    "average_elixir": deck_analysis["average_elixir"],
+                    "plain_explanation": deck_personality["plain_explanation"],
+                },
                 seed=seed or player_tag,
                 goblin_mode=goblin_mode,
             )
@@ -653,7 +914,10 @@ class AnalysisService:
                 ],
                 "high" if level_analysis["total_losses_with_levels"] >= 5 else "medium",
                 [],
-                {"overlevelled_losses": level_analysis["loss_counts"]["overlevelled"]},
+                {
+                    "overlevelled_losses": level_analysis["loss_counts"]["overlevelled"],
+                    "plain_explanation": "This means the player lost while their average deck level was meaningfully higher than the opponent's. It is playful correlation, not proof of skill.",
+                },
                 seed or player_tag,
                 goblin_mode,
             )
@@ -665,7 +929,10 @@ class AnalysisService:
                 behaviour_analysis["evidence"],
                 "high" if behaviour_analysis["changes_after_losses"] >= 4 else "medium",
                 behaviour_analysis["main_deck"],
-                {"changes_after_losses": behaviour_analysis["changes_after_losses"]},
+                {
+                    "changes_after_losses": behaviour_analysis["changes_after_losses"],
+                    "plain_explanation": "This is based on deck similarity across sequential battles and whether major changes followed losses.",
+                },
                 seed or player_tag,
                 goblin_mode,
             )
@@ -713,8 +980,9 @@ class AnalysisService:
                 )
             )
 
+        roasts = dedupe_roasts(roasts)
         headline_roast = max(roasts, key=lambda item: (len(item["evidence"]), item["confidence"] == "high"))
-        title = f"{headline_roast['title']} {troll_score['label'].upper()}".strip()
+        title = f"{personality_report['title']} - {fraud_score['tier']}".strip()
 
         return {
             "player_summary": {
@@ -728,18 +996,21 @@ class AnalysisService:
             },
             "battle_summary": battle_summary,
             "deck_analysis": {**deck_analysis, "emotional_support_card": emotional_support, "main_character": main_character},
+            "deck_personality": deck_personality,
             "matchup_analysis": matchup_analysis,
             "level_analysis": level_analysis,
             "behaviour_analysis": behaviour_analysis,
             "clutch_analysis": clutch_analysis,
             "divorce_recommendation": divorce,
+            "fraud_score": fraud_score,
+            "personality_report": personality_report,
             "roast_report": {
                 "title": title,
-                "troll_score": troll_score["score"],
-                "score_label": troll_score["label"],
-                "headline_roast": headline_roast["text"],
-                "evidence": headline_roast["evidence"],
-                "score_breakdown": troll_score["components"],
+                "troll_score": fraud_score["score"],
+                "score_label": fraud_score["tier"],
+                "headline_roast": fraud_score["headline_roast"],
+                "evidence": fraud_score["score_receipts"] or headline_roast["evidence"],
+                "score_breakdown": fraud_score["contributors"],
             },
             "roasts": roasts,
             "disclaimer": "Results are based on recent public battle-log deck, crown, level, and matchup data. The Clash Royale API does not provide replay footage, card placements, elixir spending, timing, or card-cast counts.",

@@ -1,40 +1,47 @@
 # Saville Fraud Royale Detector
 
-A troll-style Clash Royale dashboard that analyses recent battle-log evidence, deck composition, matchup patterns, and card levels to produce playful fraud reports. It does not use a paid LLM API. Every diagnosis and roast is rule-based and template-driven.
+A premium troll-style Clash Royale dashboard that turns recent battle-log evidence into an entertainment-grade fraud report. It analyzes deck shape, card levels, matchup patterns, close-game results, and panic switching, then produces a rule-based roast report with receipts.
 
-## Features
+No paid LLM API is used. All verdicts, descriptions, and jokes come from deterministic rules and local template catalogs.
 
-- React + Vite + TypeScript frontend with Tailwind, Recharts, Framer Motion, and lucide icons
-- FastAPI backend with a Clash Royale API service layer
-- Mock demo mode with four demo victims and 25 generated battles per victim
-- Rule-based deck personality, matchup trauma, level-blame, panic-switching, clutch, and divorce recommendations
-- Evidence drawers under every major roast
-- Goblin Mode toggle for stronger non-hateful roast templates
-- Client-side share, copy, and SVG image download for the report summary
-- SQLite report cache
-- Unit tests for the core analysis functions
+## What It Shows
 
-## Screenshot Placeholders
+- Fraud Score: the main 0-100 verdict, built from evidence-backed contributors.
+- Overall Personality Report: a playful deck-behavior summary with a clear scope note.
+- Deck Personality: archetype estimate, plain-language deck explanation, and detected traits.
+- Matchup Trauma: repeated opponent cards, recurring card cores, and sample-size confidence.
+- Behaviour Patterns: deck switching after losses, main deck record, and deck similarity.
+- Overlevelled Fraud Score: the percentage of level-known losses where the player had a meaningful average card-level advantage.
+- Supporting Evidence: simplified charts for score contributors, loss types, most-used cards, and recent trend.
+- Share/copy/download actions for the generated report.
 
-Add screenshots here after running the app locally:
+## Data Modes
 
-- `docs/screenshots/landing.png`
-- `docs/screenshots/report-dashboard.png`
+The app supports both mock and real Clash Royale data:
+
+- `USE_MOCK_DATA=true`: uses local demo victims and generated battle logs.
+- `USE_MOCK_DATA=false`: calls the official Clash Royale API from the FastAPI backend.
+
+The frontend never receives the API key. Keep the key only in the project root `.env` file or another backend-only environment source. Do not commit `.env`.
+
+## Official Card Icons
+
+When real Clash Royale API responses include official `iconUrls.medium` or `iconUrls.evolutionMedium` values, the backend passes those URLs through as `icon_url` and the frontend displays them. If an icon URL is not present, the UI uses a clean initials fallback instead of copied or scraped card art.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-  User["User enters player tag"] --> Frontend["React dashboard"]
+  User["Player tag"] --> Frontend["React + Vite dashboard"]
   Frontend --> Backend["FastAPI /api/reports/{tag}"]
-  Backend --> Mode{"USE_MOCK_DATA?"}
-  Mode -->|true| Mock["data/mock_data.json"]
+  Backend --> Mode{"USE_MOCK_DATA"}
+  Mode -->|true| Mock["Local mock data"]
   Mode -->|false| Clash["Official Clash Royale API"]
-  Backend --> Cards["data/cards.json"]
-  Backend --> Analysis["Rule-based analysis engine"]
-  Analysis --> Roasts["Template roast engine"]
+  Backend --> Cards["Local card metadata"]
+  Backend --> Rules["Rule-based analysis"]
+  Rules --> Templates["Template selector"]
   Backend --> Cache["SQLite report cache"]
-  Roasts --> Frontend
+  Backend --> Frontend
 ```
 
 ## Setup
@@ -45,13 +52,29 @@ From the project root:
 cd C:\Users\hp\Documents\Codex\2026-06-30\re\saville-fraud-royale-detector
 ```
 
-Create a `.env` file from the example:
+Install backend dependencies:
+
+```powershell
+cd backend
+py -m pip install -r requirements.txt
+```
+
+Install frontend dependencies:
+
+```powershell
+cd ..\frontend
+npm.cmd install
+```
+
+## Environment
+
+Create `.env` from the example if needed:
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-Enable mock mode in `.env`:
+Mock mode:
 
 ```text
 USE_MOCK_DATA=true
@@ -59,39 +82,47 @@ CLASH_ROYALE_API_KEY=
 FRONTEND_ORIGIN=http://localhost:5173
 ```
 
-## Backend
+Real API mode:
 
-Install dependencies:
+```text
+USE_MOCK_DATA=false
+CLASH_ROYALE_API_KEY=your_backend_only_key
+FRONTEND_ORIGIN=http://localhost:5173
+```
+
+Get a Clash Royale API key from the official developer portal:
+
+```text
+https://developer.clashroyale.com/
+```
+
+## Run Locally
+
+Backend on the default port:
 
 ```powershell
 cd backend
-py -m pip install -r requirements.txt
-```
-
-Run the backend:
-
-```powershell
 py -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Health check:
+If Windows blocks or reserves port `8000`, run the backend on another port, for example:
 
 ```powershell
-Invoke-RestMethod -Uri http://127.0.0.1:8000/api/health
+py -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8080
 ```
 
-## Frontend
+Then point the frontend at that backend:
 
-Install dependencies:
+```powershell
+cd ..\frontend
+$env:VITE_API_BASE_URL="http://127.0.0.1:8080"
+npm.cmd run dev
+```
+
+Frontend on the default backend:
 
 ```powershell
 cd frontend
-npm.cmd install
-```
-
-Run the frontend:
-
-```powershell
 npm.cmd run dev
 ```
 
@@ -101,35 +132,30 @@ Open:
 http://localhost:5173
 ```
 
-## Real Clash Royale API Mode
+Health check:
 
-Get an API key from the official Clash Royale developer portal:
-
-```text
-https://developer.clashroyale.com/
+```powershell
+Invoke-RestMethod -Uri http://127.0.0.1:8000/api/health
 ```
 
-Set:
+## API
+
+Main local endpoints:
 
 ```text
-USE_MOCK_DATA=false
-CLASH_ROYALE_API_KEY=your_backend_only_key
+GET /api/health
+GET /api/demo-victims
+GET /api/reports/{player_tag}?goblin_mode=false&seed=saville
 ```
 
-Then restart the backend. If `USE_MOCK_DATA=true`, only the built-in demo victims can load; real player tags will not call the Clash Royale API.
-
-Never put the API key in the frontend. The frontend only calls the FastAPI backend.
-
-The backend supports:
+The backend normalizes and URL-encodes player tags before calling:
 
 ```text
 GET /v1/players/%23{player_tag}
 GET /v1/players/%23{player_tag}/battlelog
 ```
 
-Player tags are normalized and URL-encoded by the backend service.
-
-## Tests
+## Tests And Build
 
 Run backend tests:
 
@@ -145,22 +171,10 @@ cd frontend
 npm.cmd run build
 ```
 
-## Limitations
+The backend tests cover the scoring engine, deterministic template output, duplicate roast prevention, official icon URL pass-through, low-sample confidence, deck trait detection, and compatibility between the legacy `roast_report` fields and the newer report sections.
 
-The Clash Royale battle log does not provide replay footage, card placements, elixir spending, card timing, or card-cast counts. The app only analyses recent public battle-log data: decks, crowns, outcomes, opponent deck cards, player deck cards, and card levels when present.
+## Limits
 
-Small samples are marked with lower confidence. The dashboard is for entertainment and evidence-based joking, not guaranteed meta coaching.
+The Clash Royale battle log does not include replay footage, card placements, elixir spending, timing, card-cast counts, or exact in-match decisions. The dashboard only uses recent public battle-log data: decks, crowns, results, opponent deck cards, player deck cards, and card levels when present.
 
-## Git Workflow
-
-Suggested workflow:
-
-```powershell
-git init
-git pull origin main
-git add .
-git commit -m "Build Saville Fraud Royale Detector dashboard"
-git push origin main
-```
-
-If `git pull origin main` reports conflicts, inspect and resolve them before committing. Do not overwrite remote work blindly.
+The personality report is a joke summary of deck behavior, not a real psychological diagnosis. Small samples are deliberately marked with lower confidence.

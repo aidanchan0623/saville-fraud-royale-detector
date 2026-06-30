@@ -5,16 +5,25 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.services.analysis_service import (
+    AnalysisService,
     average_deck_elixir,
+    build_fraud_score,
+    build_deck_personality,
     calculate_battle_summary,
     calculate_troll_score,
     classify_level_disadvantage,
     deck_similarity,
+    detect_deck_traits,
     detect_emotional_support_card,
+    enrich_card,
     detect_panic_switching,
     normalize_player_tag,
     rank_traumatic_opponent_cards,
 )
+from app.rules.deck_templates import DECK_STYLE_COPY
+from app.rules.expression_selector import ExpressionSelector
+from app.rules.fraud_score_templates import CONTRIBUTOR_COPY, TIER_COPY
+from app.rules.personality_templates import GOBLIN_INTERVENTIONS, PERSONALITY_TEMPLATES
 from app.services.card_data_service import get_card_service
 from app.services.roast_engine import RoastEngine
 
@@ -57,6 +66,21 @@ class AnalysisTests(unittest.TestCase):
             battle(self.main, self.normal_opp, "win", 14, 13),
             battle(self.alt, self.normal_opp, "loss", 14, 13),
         ]
+
+    def sample_player(self):
+        return {
+            "tag": PLAYER_TAG,
+            "name": "Local Tester",
+            "arena": {"name": "Test Arena"},
+            "trophies": 6500,
+            "expLevel": 44,
+            "clan": {"name": "Unit Test Clan"},
+            "currentDeck": deck(self.main, 14),
+        }
+
+    def build_sample_report(self, seed="fixed", goblin_mode=False):
+        service = AnalysisService(get_card_service(), RoastEngine())
+        return service.build_report(self.sample_player(), self.sample_battles(), seed=seed, goblin_mode=goblin_mode)
 
     def test_player_tag_normalization(self):
         self.assertEqual(normalize_player_tag(" %23abc-123 "), "ABC123")
@@ -128,6 +152,164 @@ class AnalysisTests(unittest.TestCase):
         self.assertEqual(roast["confidence"], "high")
         self.assertIn("text", roast)
         self.assertIn("evidence", roast)
+        self.assertIn("funny_description", roast)
+        self.assertIn("plain_language_explanation", roast)
+
+    def test_report_has_new_sections_and_compatible_legacy_fields(self):
+        report = self.build_sample_report()
+        for key in ("fraud_score", "personality_report", "deck_personality", "roast_report", "roasts"):
+            self.assertIn(key, report)
+
+        self.assertEqual(report["roast_report"]["troll_score"], report["fraud_score"]["score"])
+        self.assertEqual(report["roast_report"]["score_label"], report["fraud_score"]["tier"])
+        self.assertTrue(report["fraud_score"]["contributors"])
+        self.assertTrue(report["personality_report"]["scope_note"])
+        self.assertTrue(report["deck_personality"]["plain_explanation"])
+
+    def test_report_has_no_duplicate_roast_rule_ids(self):
+        report = self.build_sample_report()
+        rule_ids = [roast["rule_id"] for roast in report["roasts"]]
+        self.assertEqual(len(rule_ids), len(set(rule_ids)))
+
+    def test_report_output_is_deterministic_with_same_seed(self):
+        first = self.build_sample_report(seed="repeatable")
+        second = self.build_sample_report(seed="repeatable")
+        self.assertEqual(first["fraud_score"], second["fraud_score"])
+        self.assertEqual(first["personality_report"], second["personality_report"])
+        self.assertEqual(first["deck_personality"], second["deck_personality"])
+
+    def test_report_copy_varies_across_seed_values(self):
+        first = self.build_sample_report(seed="alpha")
+        second = self.build_sample_report(seed="bravo")
+        first_copy = (
+            first["fraud_score"]["headline_roast"],
+            first["personality_report"]["summary"],
+            first["deck_personality"]["roast"],
+        )
+        second_copy = (
+            second["fraud_score"]["headline_roast"],
+            second["personality_report"]["summary"],
+            second["deck_personality"]["roast"],
+        )
+        self.assertNotEqual(first_copy, second_copy)
+
+    def test_template_catalog_has_multiple_variants_per_category(self):
+        self.assertGreaterEqual(len(PERSONALITY_TEMPLATES), 30)
+        self.assertGreaterEqual(len(GOBLIN_INTERVENTIONS), 5)
+        for copy in TIER_COPY.values():
+            self.assertGreaterEqual(len(copy["labels"]), 5)
+            self.assertGreaterEqual(len(copy["descriptions"]), 12)
+            self.assertGreaterEqual(len(copy["headlines"]), 5)
+        for copy in CONTRIBUTOR_COPY.values():
+            self.assertGreaterEqual(len(copy["roasts"]), 3)
+            self.assertTrue(copy["description"])
+        for copy in DECK_STYLE_COPY.values():
+            self.assertGreaterEqual(len(copy["roasts"]), 3)
+            self.assertTrue(copy["plain"])
+
+    def test_fraud_score_contributors_are_rich_and_plain_language(self):
+        report = self.build_sample_report()
+        contributors = report["fraud_score"]["contributors"]
+        self.assertTrue(contributors)
+        for contributor in contributors:
+            self.assertIn("label", contributor)
+            self.assertIn("points", contributor)
+            self.assertIn("description", contributor)
+            self.assertIn("evidence", contributor)
+            self.assertTrue(contributor["description"])
+
+        for roast in report["roasts"]:
+            self.assertTrue(roast["plain_language_explanation"])
+            self.assertTrue(roast["funny_description"])
+
+    def test_personality_report_is_evidence_scoped_not_a_real_diagnosis(self):
+        report = self.build_sample_report()
+        personality = report["personality_report"]
+        self.assertIn("battle-log", personality["scope_note"])
+        self.assertIn("not a real psychological diagnosis", personality["scope_note"])
+        self.assertGreaterEqual(len(personality["evidence"]), 5)
+
+    def test_low_battle_sample_reduces_fraud_score_confidence(self):
+        report = self.build_sample_report()
+        self.assertLess(report["battle_summary"]["battles_analysed"], 10)
+        self.assertEqual(report["fraud_score"]["confidence"], "low")
+
+    def test_goblin_mode_copy_avoids_hard_prohibited_phrases(self):
+        report = self.build_sample_report(goblin_mode=True)
+        rendered = " ".join(
+            [report["personality_report"]["intervention_tip"]]
+            + [roast["text"] for roast in report["roasts"]]
+        ).lower()
+        prohibited = ["kill yourself", "kys", "self-harm", "racial slur", "homophobic slur"]
+        for phrase in prohibited:
+            self.assertNotIn(phrase, rendered)
+
+    def test_deck_personality_traits_reflect_detected_deck_shape(self):
+        heavy_troop_deck = [
+            {"name": "Mega Knight", "type": "troop", "elixir": 7, "traits": ["splash"]},
+            {"name": "Wizard", "type": "troop", "elixir": 5, "traits": ["splash", "anti_air"]},
+            {"name": "Elite Barbarians", "type": "troop", "elixir": 6, "traits": []},
+            {"name": "Valkyrie", "type": "troop", "elixir": 4, "traits": ["splash"]},
+        ]
+        traits = detect_deck_traits(heavy_troop_deck, 5.5, "Beatdown-ish")
+        labels = {trait["label"] for trait in traits}
+        self.assertIn("High elixir commitment", labels)
+        self.assertIn("Weak anti-air", labels)
+        self.assertIn("No small spell", labels)
+
+    def test_card_icons_use_official_api_icon_urls_when_available(self):
+        card = enrich_card({"name": "Mega Knight", "iconUrls": {"medium": "https://example.test/mega-knight.png"}})
+        self.assertEqual(card["icon_url"], "https://example.test/mega-knight.png")
+
+    def test_builders_keep_mock_and_live_report_contract_compatible(self):
+        selector = ExpressionSelector("contract")
+        battle_summary = {
+            "battles_analysed": 12,
+            "wins": 3,
+            "losses": 9,
+            "draws": 0,
+            "win_rate": 25,
+            "three_crown_losses": 2,
+            "close_wins": 1,
+            "close_losses": 5,
+        }
+        deck_analysis = {
+            "current_deck": deck(self.main, 14),
+            "average_elixir": 4.25,
+            "deck_identity_score": 40,
+            "estimated_deck_style": "Midladder emergency response unit",
+            "personality_rule": {"evidence": ["Expensive splash-heavy deck"], "confidence": "medium"},
+        }
+        matchup_analysis = {"natural_predator": {"label": "Recurring counter shell", "matches": 5, "losses": 4}}
+        level_analysis = {"loss_counts": {"overlevelled": 4}, "overlevelled_fraud_score": 44}
+        behaviour_analysis = {"changes_after_losses": 3, "unique_decks": 3, "main_deck_games": 6, "main_deck_win_rate": 33}
+        emotional_support = {"detected": False, "evidence": []}
+        clutch_analysis = {"close_wins": 1, "close_losses": 5}
+        troll_score = calculate_troll_score(
+            battle_summary,
+            deck_analysis,
+            matchup_analysis,
+            level_analysis,
+            behaviour_analysis,
+            emotional_support,
+            clutch_analysis,
+        )
+        fraud_score = build_fraud_score(
+            troll_score,
+            battle_summary,
+            deck_analysis,
+            matchup_analysis,
+            level_analysis,
+            behaviour_analysis,
+            emotional_support,
+            clutch_analysis,
+            selector,
+        )
+        deck_personality = build_deck_personality(deck_analysis, selector)
+        self.assertIn("score", fraud_score)
+        self.assertIn("contributors", fraud_score)
+        self.assertIn("plain_explanation", deck_personality)
+        self.assertIn("traits", deck_personality)
 
 
 if __name__ == "__main__":
