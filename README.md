@@ -116,6 +116,8 @@ USE_MOCK_DATA=false
 CLASH_ROYALE_API_KEY=your_backend_only_key
 ```
 
+Then restart the backend. If `USE_MOCK_DATA=true`, only the built-in demo victims can load; real player tags will not call the Clash Royale API.
+
 Never put the API key in the frontend. The frontend only calls the FastAPI backend.
 
 The backend supports:
@@ -162,4 +164,3 @@ git push origin main
 ```
 
 If `git pull origin main` reports conflicts, inspect and resolve them before committing. Do not overwrite remote work blindly.
-

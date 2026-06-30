@@ -223,6 +223,7 @@ function Landing({
   onPickDemo,
   goblinMode,
   setGoblinMode,
+  mockMode,
 }: {
   tag: string;
   setTag: (value: string) => void;
@@ -232,6 +233,7 @@ function Landing({
   onPickDemo: (tag: string) => void;
   goblinMode: boolean;
   setGoblinMode: (value: boolean) => void;
+  mockMode: boolean;
 }) {
   return (
     <section className="relative min-h-screen overflow-hidden px-4 py-10 sm:px-6 lg:px-8">
@@ -264,6 +266,11 @@ function Landing({
             <p className="mt-5 max-w-xl rounded-lg border border-white/10 bg-black/20 p-4 text-sm font-semibold leading-6 text-white/70">
               We analyse decks and recent battle outcomes, not actual gameplay. Unfortunately, that is already enough evidence.
             </p>
+            {mockMode && (
+              <p className="mt-4 max-w-xl rounded-lg border border-sky-300/30 bg-sky-400/10 p-4 text-sm font-bold leading-6 text-sky-50">
+                Mock mode is active. Real player tags need `USE_MOCK_DATA=false` and a backend Clash Royale API key.
+              </p>
+            )}
           </motion.div>
 
           <motion.form
@@ -581,11 +588,15 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [demos, setDemos] = useState<DemoVictim[]>([]);
+  const [mockMode, setMockMode] = useState(true);
   const [report, setReport] = useState<Report | null>(null);
 
   useEffect(() => {
     getDemoVictims()
-      .then((payload) => setDemos(payload.victims))
+      .then((payload) => {
+        setMockMode(payload.mock_mode);
+        setDemos(payload.victims);
+      })
       .catch(() => setDemos([]));
   }, []);
 
@@ -621,6 +632,7 @@ export default function App() {
         onPickDemo={pickDemo}
         goblinMode={goblinMode}
         setGoblinMode={setGoblinMode}
+        mockMode={mockMode}
       />
       {error && (
         <div className="fixed bottom-5 left-1/2 z-50 w-[min(92vw,720px)] -translate-x-1/2 rounded-lg border border-rose-300/40 bg-rose-950/90 p-4 text-sm font-bold text-rose-50 shadow-2xl">

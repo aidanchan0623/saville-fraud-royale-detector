@@ -88,7 +88,14 @@ class ClashApiService:
                 return victim
             if lowered in {victim["key"].lower(), victim["label"].lower().replace(" ", "")}:
                 return victim
-        raise HTTPException(status_code=404, detail="Demo victim not found.")
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Mock mode is enabled, so only demo victims can be loaded. "
+                "To load real player details, set USE_MOCK_DATA=false and CLASH_ROYALE_API_KEY in .env, "
+                "then restart the backend."
+            ),
+        )
 
     def _expand_mock_battles(self, victim: dict[str, Any]) -> list[dict[str, Any]]:
         battles = []
@@ -123,4 +130,3 @@ class ClashApiService:
                 }
             )
         return battles
-
