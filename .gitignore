@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.tsbuildinfo
+.venv/
+venv/
+.env
+*.sqlite3
+*.db
+node_modules/
+dist/
+coverage/
+.DS_Store
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

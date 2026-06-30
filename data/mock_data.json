@@ -1,0 +1,97 @@
+{
+  "victims": [
+    {
+      "key": "midladder",
+      "label": "Midladder Emergency Unit",
+      "profile": {"tag": "#MID001", "name": "SavilleMK", "expLevel": 47, "trophies": 6120, "arena": {"name": "Rascals Hideout"}, "clan": {"name": "Bridge Therapy"}},
+      "currentDeck": ["Mega Knight", "Wizard", "Elite Barbarians", "Rage", "Valkyrie", "Fireball", "Arrows", "Skeleton Army"],
+      "deckVariants": {
+        "main": ["Mega Knight", "Wizard", "Elite Barbarians", "Rage", "Valkyrie", "Fireball", "Arrows", "Skeleton Army"],
+        "panic_air": ["Mega Knight", "Wizard", "Balloon", "Rage", "Valkyrie", "Fireball", "Baby Dragon", "Skeleton Army"],
+        "panic_hog": ["Hog Rider", "Wizard", "Elite Barbarians", "Rage", "Valkyrie", "Fireball", "Arrows", "Cannon"],
+        "panic_siege": ["X-Bow", "Wizard", "Tesla", "Rage", "Valkyrie", "Fireball", "Arrows", "Skeletons"]
+      },
+      "opponentDecks": {
+        "mk_control": ["Mega Knight", "Firecracker", "Inferno Tower", "Miner", "Zap", "Bats", "Knight", "Wall Breakers"],
+        "inferno_bait": ["Princess", "Goblin Barrel", "Inferno Tower", "Rocket", "Knight", "Goblins", "The Log", "Goblin Gang"],
+        "air": ["Lava Hound", "Balloon", "Baby Dragon", "Phoenix", "Arrows", "Lightning", "Tombstone", "Miner"],
+        "normal": ["Giant", "Musketeer", "Mini P.E.K.KA", "Fireball", "Zap", "Archers", "Knight", "Bats"]
+      },
+      "plan": [
+        ["loss","main","mk_control",1,2,14,13], ["loss","panic_air","mk_control",0,3,14,13], ["win","panic_hog","normal",2,1,14,13], ["loss","main","inferno_bait",1,2,14,14], ["loss","panic_siege","mk_control",0,1,14,13],
+        ["win","main","normal",3,1,14,13], ["loss","panic_air","air",1,2,14,14], ["loss","main","mk_control",1,2,14,13], ["draw","panic_hog","normal",1,1,14,14], ["loss","panic_siege","inferno_bait",0,2,14,13],
+        ["win","main","normal",2,0,14,13], ["loss","panic_air","mk_control",0,3,14,13], ["loss","main","inferno_bait",1,2,14,14], ["win","panic_hog","normal",2,1,14,13], ["loss","main","mk_control",1,3,14,13],
+        ["loss","panic_siege","mk_control",0,1,14,13], ["win","main","normal",1,0,14,13], ["loss","panic_air","air",1,2,14,14], ["loss","main","inferno_bait",0,2,14,13], ["win","panic_hog","normal",3,2,14,13],
+        ["loss","panic_siege","mk_control",1,2,14,13], ["loss","main","mk_control",0,3,14,13], ["win","main","normal",2,1,14,13], ["loss","panic_air","inferno_bait",1,2,14,14], ["loss","main","mk_control",1,2,14,13]
+      ]
+    },
+    {
+      "key": "hog",
+      "label": "Hog Cardio Addict",
+      "profile": {"tag": "#HOG260", "name": "PigInterval", "expLevel": 42, "trophies": 6588, "arena": {"name": "Silent Sanctuary"}, "clan": {"name": "Leg Day"}},
+      "currentDeck": ["Hog Rider", "Musketeer", "Cannon", "Ice Spirit", "Skeletons", "The Log", "Fireball", "Valkyrie"],
+      "deckVariants": {
+        "main": ["Hog Rider", "Musketeer", "Cannon", "Ice Spirit", "Skeletons", "The Log", "Fireball", "Valkyrie"],
+        "eq": ["Hog Rider", "Firecracker", "Cannon", "Ice Spirit", "Skeletons", "The Log", "Earthquake", "Valkyrie"],
+        "miner": ["Hog Rider", "Musketeer", "Miner", "Ice Spirit", "Skeletons", "The Log", "Fireball", "Knight"]
+      },
+      "opponentDecks": {
+        "building_shell": ["Tesla", "Knight", "Archers", "Fireball", "The Log", "X-Bow", "Skeletons", "Electro Spirit"],
+        "mk_control": ["Mega Knight", "Firecracker", "Inferno Tower", "Miner", "Zap", "Bats", "Knight", "Wall Breakers"],
+        "normal": ["Giant", "Musketeer", "Mini P.E.K.KA", "Fireball", "Zap", "Archers", "Knight", "Bats"]
+      },
+      "plan": [
+        ["win","main","normal",2,1,13,13], ["loss","main","building_shell",1,2,13,13], ["win","main","normal",1,0,13,13], ["win","eq","mk_control",2,1,13,13], ["loss","main","building_shell",0,1,13,13],
+        ["win","main","normal",3,1,13,13], ["loss","eq","building_shell",1,2,13,13], ["win","main","normal",2,0,13,13], ["loss","main","mk_control",1,2,13,13], ["win","miner","normal",1,0,13,13],
+        ["win","main","normal",2,1,13,13], ["loss","main","building_shell",1,2,13,14], ["win","eq","normal",3,2,13,13], ["loss","main","building_shell",0,1,13,13], ["win","main","normal",2,0,13,13],
+        ["win","main","mk_control",2,1,13,13], ["loss","miner","building_shell",1,2,13,13], ["win","main","normal",1,0,13,13], ["loss","main","building_shell",0,2,13,13], ["win","eq","normal",2,1,13,13],
+        ["win","main","normal",3,1,13,13], ["loss","main","building_shell",1,2,13,13], ["win","main","normal",2,1,13,13], ["win","main","normal",1,0,13,13], ["loss","eq","mk_control",1,2,13,13]
+      ]
+    },
+    {
+      "key": "overlevelled",
+      "label": "Overlevelled Fraud",
+      "profile": {"tag": "#PAY2WIN", "name": "SwipeRight", "expLevel": 51, "trophies": 7021, "arena": {"name": "Dragon Spa"}, "clan": {"name": "Receipts Only"}},
+      "currentDeck": ["Royal Giant", "Mega Knight", "Wizard", "Lightning", "Firecracker", "Valkyrie", "Arrows", "Bats"],
+      "deckVariants": {
+        "main": ["Royal Giant", "Mega Knight", "Wizard", "Lightning", "Firecracker", "Valkyrie", "Arrows", "Bats"],
+        "heavy": ["Golem", "Mega Knight", "Wizard", "Lightning", "Baby Dragon", "Valkyrie", "Arrows", "Bats"],
+        "rage": ["Elite Barbarians", "Mega Knight", "Wizard", "Rage", "Firecracker", "Valkyrie", "Arrows", "Bats"]
+      },
+      "opponentDecks": {
+        "inferno_bait": ["Princess", "Goblin Barrel", "Inferno Tower", "Rocket", "Knight", "Goblins", "The Log", "Goblin Gang"],
+        "mk_control": ["Mega Knight", "Firecracker", "Inferno Tower", "Miner", "Zap", "Bats", "Knight", "Wall Breakers"],
+        "normal": ["Hog Rider", "Musketeer", "Cannon", "Ice Spirit", "Skeletons", "The Log", "Fireball", "Valkyrie"]
+      },
+      "plan": [
+        ["loss","main","inferno_bait",1,2,15,13], ["loss","heavy","inferno_bait",0,3,15,13], ["win","rage","normal",2,1,15,13], ["loss","main","mk_control",1,2,15,13], ["loss","heavy","inferno_bait",0,2,15,13],
+        ["win","main","normal",3,1,15,13], ["loss","rage","mk_control",1,2,15,13], ["loss","main","inferno_bait",1,2,15,13], ["loss","heavy","mk_control",0,3,15,13], ["win","main","normal",2,1,15,13],
+        ["loss","rage","inferno_bait",1,2,15,13], ["loss","main","inferno_bait",0,1,15,13], ["win","heavy","normal",2,0,15,13], ["loss","main","mk_control",1,2,15,13], ["loss","rage","inferno_bait",0,2,15,13],
+        ["win","main","normal",2,1,15,13], ["loss","heavy","inferno_bait",1,3,15,13], ["loss","main","mk_control",1,2,15,13], ["win","rage","normal",3,2,15,13], ["loss","main","inferno_bait",0,2,15,13],
+        ["loss","heavy","mk_control",1,2,15,13], ["win","main","normal",2,0,15,13], ["loss","rage","inferno_bait",1,2,15,13], ["loss","main","inferno_bait",0,3,15,13], ["win","main","normal",2,1,15,13]
+      ]
+    },
+    {
+      "key": "responsible",
+      "label": "Responsible Player",
+      "profile": {"tag": "#NORMAL", "name": "ReceiptsReady", "expLevel": 44, "trophies": 6840, "arena": {"name": "Boot Camp"}, "clan": {"name": "Healthy Decisions"}},
+      "currentDeck": ["Miner", "Wall Breakers", "Magic Archer", "Bomb Tower", "Valkyrie", "The Log", "Fireball", "Bats"],
+      "deckVariants": {
+        "main": ["Miner", "Wall Breakers", "Magic Archer", "Bomb Tower", "Valkyrie", "The Log", "Fireball", "Bats"],
+        "control": ["Miner", "Wall Breakers", "Magic Archer", "Tesla", "Valkyrie", "The Log", "Fireball", "Bats"]
+      },
+      "opponentDecks": {
+        "mk_control": ["Mega Knight", "Firecracker", "Inferno Tower", "Miner", "Zap", "Bats", "Knight", "Wall Breakers"],
+        "air": ["Lava Hound", "Balloon", "Baby Dragon", "Phoenix", "Arrows", "Lightning", "Tombstone", "Miner"],
+        "normal": ["Hog Rider", "Musketeer", "Cannon", "Ice Spirit", "Skeletons", "The Log", "Fireball", "Valkyrie"]
+      },
+      "plan": [
+        ["win","main","normal",2,1,13,13], ["win","main","mk_control",1,0,13,13], ["loss","main","air",1,2,13,13], ["win","main","normal",3,1,13,13], ["win","control","mk_control",2,1,13,13],
+        ["loss","main","normal",1,2,13,13], ["win","main","air",2,1,13,13], ["win","main","normal",1,0,13,13], ["loss","control","mk_control",0,1,13,13], ["win","main","normal",2,0,13,13],
+        ["win","main","air",2,1,13,13], ["loss","main","normal",1,2,13,13], ["win","main","mk_control",3,2,13,13], ["win","control","normal",1,0,13,13], ["loss","main","air",0,2,13,14],
+        ["win","main","normal",2,1,13,13], ["win","main","mk_control",2,0,13,13], ["loss","control","normal",1,2,13,13], ["win","main","air",2,1,13,13], ["win","main","normal",3,1,13,13],
+        ["loss","main","mk_control",1,2,13,13], ["win","control","normal",2,1,13,13], ["win","main","air",1,0,13,13], ["win","main","normal",2,0,13,13], ["loss","main","air",1,2,13,13]
+      ]
+    }
+  ]
+}
