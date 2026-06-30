@@ -1,4 +1,5 @@
 import json
+import ssl
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -10,6 +11,14 @@ from fastapi import HTTPException
 from app.config import settings
 from app.services.analysis_service import normalize_player_tag
 from app.services.card_data_service import CardDataService, get_card_service
+
+
+def _httpx_verify_context() -> ssl.SSLContext | bool:
+    try:
+        import truststore
+    except ImportError:
+        return True
+    return truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
 
 
 class ClashApiService:
@@ -59,9 +68,21 @@ class ClashApiService:
     async def _request(self, path: str) -> Any:
         headers = {"Authorization": f"Bearer {settings.clash_api_key}"}
         try:
-            async with httpx.AsyncClient(base_url=settings.clash_api_base_url, timeout=15) as client:
+            async with httpx.AsyncClient(
+                base_url=settings.clash_api_base_url,
+                timeout=15,
+                verify=_httpx_verify_context(),
+            ) as client:
                 response = await client.get(path, headers=headers)
         except httpx.HTTPError as exc:
+            if "CERTIFICATE_VERIFY_FAILED" in str(exc):
+                raise HTTPException(
+                    status_code=503,
+                    detail=(
+                        "Python could not verify the Clash Royale API TLS certificate. "
+                        "Install backend dependencies from requirements.txt so truststore can use the Windows certificate store."
+                    ),
+                ) from exc
             raise HTTPException(status_code=503, detail="Clash Royale API appears unavailable.") from exc
 
         if response.status_code == 403:
