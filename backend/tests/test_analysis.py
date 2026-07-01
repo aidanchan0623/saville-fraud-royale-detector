@@ -19,6 +19,7 @@ from app.services.analysis_service import (
     deck_similarity,
     detect_deck_traits,
     detect_emotional_support_card,
+    detect_level_analysis,
     enrich_card,
     detect_panic_switching,
     normalize_player_tag,
@@ -33,6 +34,7 @@ from app.rules.fraud_score_templates import CONTRIBUTOR_COPY, TIER_COPY
 from app.rules.personality_templates import GOBLIN_INTERVENTIONS, PERSONALITY_TEMPLATES
 from app.rules.roast_composer import template_catalog_counts
 from app.services.card_data_service import get_card_service
+from app.services.community_meme_service import COMMUNITY_MEME_DISCLAIMER, analyse_community_meme_deck
 from app.services.roast_engine import RoastEngine
 
 
@@ -180,8 +182,9 @@ class AnalysisTests(unittest.TestCase):
 
     def test_troll_score_calculation(self):
         score = calculate_troll_score(
-            {"win_rate": 33, "losses": 4, "three_crown_losses": 1},
+            {"win_rate": 33, "losses": 4, "three_crown_losses": 1, "eligible_battles": 12},
             {
+                "current_deck": deck(self.main, 14),
                 "deck_identity_score": 40,
                 "average_elixir": 4.8,
                 "structural_issues": [
@@ -196,11 +199,15 @@ class AnalysisTests(unittest.TestCase):
             {"classification": "PANIC_SWITCHER", "changes_after_losses": 3, "post_loss_opportunities": 3, "main_deck_games": 5, "main_deck_win_rate": 40, "evidence": ["Switching"], "confidence": "medium"},
             {"detected": True},
             {"close_wins": 1, "close_losses": 4, "evidence": ["Close games"], "confidence": "medium"},
+            {"total_eligible_matches": 12, "wins": 3, "losses": 9, "draws": 0, "win_rate": 25, "loss_rate": 75, "close_wins": 1, "close_losses": 4, "confidence": "medium", "evidence": ["Loss record"]},
+            ExpressionSelector("score-test"),
         )
-        self.assertGreater(score["score"], 40)
-        self.assertTrue(score["components"])
-        deck_points = sum(item["applied_points"] for item in score["components"] if item["group"] == "deck_construction")
-        self.assertLessEqual(deck_points, 15)
+        self.assertGreater(score["score"], 30)
+        self.assertEqual([item["key"] for item in score["score_groups"]], ["community_meme", "performance_loss", "level_reliance"])
+        caps = {"community_meme": 45, "performance_loss": 30, "level_reliance": 25}
+        for component in score["score_groups"]:
+            self.assertLessEqual(component["points"], caps[component["key"]])
+        self.assertLessEqual(score["score"], 100)
 
     def test_rule_engine_output_structure(self):
         roast = RoastEngine().render(
@@ -371,6 +378,95 @@ class AnalysisTests(unittest.TestCase):
         for roast in report["roasts"]:
             self.assertTrue(roast["plain_language_explanation"])
             self.assertTrue(roast["funny_description"])
+
+    def test_fraud_score_uses_three_new_groups_only(self):
+        report = self.build_sample_report()
+        groups = report["fraud_score"]["score_groups"]
+        self.assertEqual([group["key"] for group in groups], ["community_meme", "performance_loss", "level_reliance"])
+        self.assertEqual(report["fraud_score"]["group_caps"], {"community_meme": 45, "performance_loss": 30, "level_reliance": 25})
+        for group in groups:
+            self.assertLessEqual(group["points"], group["max_points"])
+        self.assertLessEqual(report["fraud_score"]["score"], 100)
+        self.assertIn(COMMUNITY_MEME_DISCLAIMER, report["fraud_score"]["score_receipts"])
+
+    def test_community_meme_package_bonus_is_stronger_than_mega_knight_alone(self):
+        mk_only = ["Mega Knight", "Knight", "Musketeer", "Cannon", "Ice Spirit", "Skeletons", "The Log", "Fireball"]
+        landlord_package = ["Mega Knight", "Royal Recruits", "Wizard", "Firecracker", "Arrows", "Zap", "Bats", "Cannon"]
+        mk_score = analyse_community_meme_deck({"current_deck": deck(mk_only), "recent_main_deck": {"cards": [], "card_details": []}}, ExpressionSelector("mk-only"))
+        package_score = analyse_community_meme_deck({"current_deck": deck(landlord_package), "recent_main_deck": {"cards": [], "card_details": []}}, ExpressionSelector("mk-rr"))
+        self.assertLessEqual(mk_score["score"], 10)
+        self.assertGreater(package_score["score"], mk_score["score"] + 12)
+        self.assertIn("mega_knight_royal_recruits", package_score["matched_combinations"])
+
+    def test_recognised_normal_meta_deck_is_not_called_brainless(self):
+        names = ["Hog Rider", "Musketeer", "Cannon", "Ice Spirit", "Skeletons", "The Log", "Fireball", "Valkyrie"]
+        meme = analyse_community_meme_deck({"current_deck": deck(names), "recent_main_deck": {"cards": [], "card_details": []}}, ExpressionSelector("hog-meta"))
+        combined = " ".join([meme["roast"], *meme["evidence"]]).lower()
+        self.assertLessEqual(meme["score"], 8)
+        self.assertNotIn("brainless", combined)
+        self.assertNotIn("no-skill", combined)
+        self.assertNotIn("no skill", combined)
+
+    def test_low_sample_size_limits_performance_and_level_scores(self):
+        low_sample = [{**battle(self.main, self.opp, "loss", 14, 13), "battleTime": f"20260630T120{index}00.000Z"} for index in range(3)]
+        level_analysis = detect_level_analysis(PLAYER_TAG, low_sample)
+        score = calculate_troll_score(
+            {"eligible_battles": 3, "battles_analysed": 3, "wins": 0, "losses": 3, "draws": 0, "win_rate": 0, "loss_rate": 100},
+            {"current_deck": deck(self.main, 14), "recent_main_deck": {"cards": [], "card_details": []}},
+            {},
+            level_analysis,
+            {},
+            {},
+            {"close_wins": 0, "close_losses": 0},
+            {"total_eligible_matches": 3, "wins": 0, "losses": 3, "draws": 0, "win_rate": 0, "loss_rate": 100, "close_wins": 0, "close_losses": 0},
+            ExpressionSelector("low-sample"),
+        )
+        performance = next(group for group in score["score_groups"] if group["key"] == "performance_loss")
+        level = next(group for group in score["score_groups"] if group["key"] == "level_reliance")
+        self.assertLessEqual(performance["points"], 5)
+        self.assertLessEqual(level["points"], 5)
+        self.assertFalse(level_analysis["level_chart_visible"])
+
+    def test_level_chart_uses_only_eligible_personal_1v1_matches(self):
+        valid = {**battle(self.main, self.opp, "win", 14, 13), "battleTime": "20260630T120000.000Z"}
+        draft = {**battle(self.main, self.opp, "loss", 14, 13), "type": "tripleDraft", "battleTime": "20260630T120100.000Z"}
+        two_v_two = {**battle(self.main, self.opp, "loss", 14, 13), "type": "2v2", "battleTime": "20260630T120200.000Z"}
+        level_analysis = detect_level_analysis(PLAYER_TAG, [valid, draft, two_v_two])
+        self.assertEqual(level_analysis["level_known_sample_size"], 1)
+        self.assertEqual(level_analysis["level_reliance_chart"][0]["wins"], 1)
+        self.assertFalse(level_analysis["level_chart_visible"])
+
+    def test_level_reliance_roast_changes_for_overlevelled_wins_vs_losses(self):
+        winning = [{**battle(self.main, self.opp, "win", 14, 13), "battleTime": f"20260630T12{index:02d}00.000Z"} for index in range(6)]
+        losing = [{**battle(self.main, self.opp, "loss", 14, 13), "battleTime": f"20260630T13{index:02d}00.000Z"} for index in range(6)]
+        win_level = detect_level_analysis(PLAYER_TAG, winning)
+        loss_level = detect_level_analysis(PLAYER_TAG, losing)
+        win_score = calculate_troll_score({"eligible_battles": 6, "battles_analysed": 6, "wins": 6, "losses": 0, "win_rate": 100}, {"current_deck": deck(self.main, 14)}, {}, win_level, {}, {}, {"close_wins": 0, "close_losses": 0}, {"total_eligible_matches": 6, "wins": 6, "losses": 0, "draws": 0, "win_rate": 100, "loss_rate": 0}, ExpressionSelector("level-win"))
+        loss_score = calculate_troll_score({"eligible_battles": 6, "battles_analysed": 6, "wins": 0, "losses": 6, "win_rate": 0}, {"current_deck": deck(self.main, 14)}, {}, loss_level, {}, {}, {"close_wins": 0, "close_losses": 0}, {"total_eligible_matches": 6, "wins": 0, "losses": 6, "draws": 0, "win_rate": 0, "loss_rate": 100}, ExpressionSelector("level-loss"))
+        win_roast = next(group for group in win_score["score_groups"] if group["key"] == "level_reliance")["roast"]
+        loss_roast = next(group for group in loss_score["score_groups"] if group["key"] == "level_reliance")["roast"]
+        self.assertNotEqual(win_roast, loss_roast)
+
+    def test_frontend_supporting_evidence_removed_and_score_charts_added(self):
+        source = Path(__file__).resolve().parents[2].joinpath("frontend", "src", "App.tsx").read_text(encoding="utf-8")
+        self.assertNotIn("Supporting Evidence", source)
+        self.assertNotIn("Fraud Score Contributors", source)
+        self.assertNotIn("Loss Type Breakdown", source)
+        self.assertNotIn("Most-Used Cards", source)
+        self.assertNotIn("Recent Match Trend", source)
+        self.assertIn("Why The Score Exists", source)
+        self.assertIn("Levels Did Not Save You", source)
+        self.assertIn("levelSample >= 5", source)
+
+    def test_roast_copy_avoids_hard_prohibited_language(self):
+        report = self.build_sample_report()
+        rendered = " ".join(
+            [group["roast"] for group in report["fraud_score"]["score_groups"]]
+            + report["fraud_score"]["score_receipts"]
+            + [report["fraud_score"]["headline_roast"]]
+        ).lower()
+        for phrase in ["brainless", "no-skill", "no skill", "sexual insult", "racial slur", "homophobic slur", "real-world threat"]:
+            self.assertNotIn(phrase, rendered)
 
     def test_personality_report_is_evidence_scoped_not_a_real_diagnosis(self):
         report = self.build_sample_report()

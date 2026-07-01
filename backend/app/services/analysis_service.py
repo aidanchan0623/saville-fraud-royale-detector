@@ -7,7 +7,6 @@ from typing import Any
 from app.rules.deck_templates import DECK_STYLE_COPY, TRAIT_EXPLANATIONS
 from app.rules.deck_roast_composer import compose_deck_roast
 from app.rules.expression_selector import ExpressionSelector
-from app.rules.fraud_score_templates import CONTRIBUTOR_COPY, TIER_COPY
 from app.rules.matchup_rules import label_opponent_core, most_common_loss_core
 from app.rules.roast_composer import compose_roast_system
 from app.services.battle_normalizer import (
@@ -25,10 +24,11 @@ from app.services.battle_normalizer import (
     shared_card_count,
 )
 from app.services.card_data_service import CardDataService, get_card_service
+from app.services.community_meme_service import COMMUNITY_MEME_DISCLAIMER, analyse_community_meme_deck
 from app.services.roast_engine import RoastEngine
 
 
-REPORT_SCHEMA_VERSION = "report-v5"
+REPORT_SCHEMA_VERSION = "report-v6"
 LEVEL_ADVANTAGE_THRESHOLD = 0.75
 
 
@@ -328,30 +328,67 @@ def rank_traumatic_opponent_cards(player_tag: str, battles: list[dict[str, Any]]
 
 def detect_level_analysis(player_tag: str, battles: list[dict[str, Any]] | list[NormalizedBattle]) -> dict[str, Any]:
     eligible = eligible_level_battles(as_normalized(player_tag, battles))
-    losses = {"underlevelled": 0, "even": 0, "overlevelled": 0}
+    bucket_order = ("overlevelled", "even", "underlevelled")
+    bucket_labels = {"overlevelled": "Overlevelled", "even": "Even level", "underlevelled": "Underlevelled"}
+    buckets: dict[str, dict[str, Any]] = {
+        key: {"wins": 0, "losses": 0, "draws": 0, "diffs": []}
+        for key in bucket_order
+    }
     details = []
-    diffs = []
+    diffs: list[float] = []
+    win_diffs: list[float] = []
+    loss_diffs: list[float] = []
     for battle in eligible:
-        if battle.result != "loss":
-            continue
         player_average = average_card_level(battle.player_deck)
         opponent_average = average_card_level(battle.opponent_deck)
         diff = round(player_average - opponent_average, 2)
         diffs.append(diff)
         label = classify_level_disadvantage(battle.player_deck, battle.opponent_deck)
-        losses[label] += 1
+        buckets[label][result_bucket(battle.result)] += 1
+        buckets[label]["diffs"].append(diff)
+        if battle.result == "win":
+            win_diffs.append(diff)
+        elif battle.result == "loss":
+            loss_diffs.append(diff)
         details.append(
             {
                 "battleTime": battle.battle_time,
                 "classification": label,
+                "result": battle.result,
                 "player_average_level": player_average,
                 "opponent_average_level": opponent_average,
                 "level_difference": diff,
             }
         )
+    losses = {key: int(buckets[key]["losses"]) for key in bucket_order}
+    wins = {key: int(buckets[key]["wins"]) for key in bucket_order}
+    draws = {key: int(buckets[key]["draws"]) for key in bucket_order}
     total_losses = sum(losses.values())
+    sample_size = len(eligible)
     fraud_score = round(losses["overlevelled"] / total_losses * 100) if total_losses else 0
-    if total_losses < 5:
+    level_chart = []
+    for key in bucket_order:
+        matches = wins[key] + losses[key] + draws[key]
+        level_chart.append(
+            {
+                "key": key,
+                "label": bucket_labels[key],
+                "wins": wins[key],
+                "losses": losses[key],
+                "draws": draws[key],
+                "matches": matches,
+                "win_rate": round(wins[key] / matches * 100) if matches else 0,
+                "average_level_difference": round(sum(buckets[key]["diffs"]) / len(buckets[key]["diffs"]), 2) if buckets[key]["diffs"] else 0,
+            }
+        )
+    over_matches = wins["overlevelled"] + losses["overlevelled"] + draws["overlevelled"]
+    even_matches = wins["even"] + losses["even"] + draws["even"]
+    under_matches = wins["underlevelled"] + losses["underlevelled"] + draws["underlevelled"]
+    over_win_rate = round(wins["overlevelled"] / over_matches * 100) if over_matches else 0
+    even_win_rate = round(wins["even"] / even_matches * 100) if even_matches else 0
+    under_win_rate = round(wins["underlevelled"] / under_matches * 100) if under_matches else 0
+
+    if sample_size < 5:
         tier = "Insufficient level evidence"
     elif fraud_score <= 20:
         tier = "No level case"
@@ -363,13 +400,39 @@ def detect_level_analysis(player_tag: str, battles: list[dict[str, Any]] | list[
         tier = "Certified level-joke material"
     else:
         tier = "The upgrades have questions"
+    if sample_size < 5:
+        level_roast = "Not enough level-known 1v1 matches to judge whether upgrades are carrying."
+    elif over_matches and losses["overlevelled"] >= wins["overlevelled"] and losses["overlevelled"] >= 2:
+        level_roast = "You brought extra levels and still found a way to make it difficult. That is genuinely impressive."
+    elif over_matches >= 3 and over_win_rate >= 60:
+        level_roast = "Your cards arrived with a height advantage and the confidence of a private-school bully."
+    elif under_matches >= 3 and under_win_rate > 50:
+        level_roast = "The deck is doing unpaid overtime. Respectfully, the cards are carrying."
+    else:
+        level_roast = "No level excuse detected. This one is between you and the deck."
     return {
         "loss_counts": losses,
+        "win_counts": wins,
+        "draw_counts": draws,
+        "result_counts": {
+            key: {"wins": wins[key], "losses": losses[key], "draws": draws[key]}
+            for key in bucket_order
+        },
         "total_losses_with_levels": total_losses,
-        "eligible_level_matches": len(eligible),
+        "eligible_level_matches": sample_size,
+        "level_known_sample_size": sample_size,
         "meaningful_level_advantage_losses": losses["overlevelled"],
+        "meaningful_level_advantage_wins": wins["overlevelled"],
         "average_level_difference": round(sum(diffs) / len(diffs), 2) if diffs else 0,
-        "confidence": confidence_from_sample(total_losses, 5, 10),
+        "average_level_difference_in_wins": round(sum(win_diffs) / len(win_diffs), 2) if win_diffs else 0,
+        "average_level_difference_in_losses": round(sum(loss_diffs) / len(loss_diffs), 2) if loss_diffs else 0,
+        "overlevelled_win_rate": over_win_rate,
+        "even_level_win_rate": even_win_rate,
+        "underlevelled_win_rate": under_win_rate,
+        "level_reliance_chart": level_chart,
+        "level_chart_visible": sample_size >= 5,
+        "level_reliance_roast": level_roast,
+        "confidence": confidence_from_sample(sample_size, 5, 12),
         "percentages": {
             "matchmaking_conspiracy": round(losses["underlevelled"] / total_losses * 100) if total_losses else 0,
             "fair_fight_failure": round(losses["even"] / total_losses * 100) if total_losses else 0,
@@ -379,8 +442,12 @@ def detect_level_analysis(player_tag: str, battles: list[dict[str, Any]] | list[
         "tier": tier,
         "details": details,
         "evidence": [
+            f"Eligible level-known 1v1 matches: {sample_size}",
             f"Eligible level-known losses: {total_losses}",
             f"Meaningful level-advantage losses: {losses['overlevelled']}",
+            f"Overlevelled record: {wins['overlevelled']}-{losses['overlevelled']}-{draws['overlevelled']}",
+            f"Even-level record: {wins['even']}-{losses['even']}-{draws['even']}",
+            f"Underlevelled record: {wins['underlevelled']}-{losses['underlevelled']}-{draws['underlevelled']}",
             f"Meaningful advantage threshold: +{LEVEL_ADVANTAGE_THRESHOLD:.2f} average levels",
         ],
     }
@@ -1111,6 +1178,164 @@ def apply_group_caps(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return applied
 
 
+def _score_group(
+    key: str,
+    label: str,
+    score: int,
+    max_score: int,
+    confidence: str,
+    sample_size: int,
+    evidence: list[str],
+    description: str,
+    roast: str,
+    raw_score: float | int | None = None,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    applied = max(0, min(max_score, int(round(score))))
+    return {
+        "key": key,
+        "group": key,
+        "label": label,
+        "raw_score": raw_score if raw_score is not None else score,
+        "raw_candidate_points": raw_score if raw_score is not None else score,
+        "score": applied,
+        "points": applied,
+        "applied_points": applied,
+        "max_score": max_score,
+        "max_points": max_score,
+        "confidence": confidence if confidence in {"low", "medium", "high"} else "low",
+        "sample_size": sample_size,
+        "evidence": evidence,
+        "evidence_count": len(evidence),
+        "description": description,
+        "roast": roast,
+        "excluded": False,
+        **(extra or {}),
+    }
+
+
+def calculate_performance_loss_component(
+    battle_summary: dict[str, Any],
+    win_rate_verdict: dict[str, Any] | None,
+    clutch_analysis: dict[str, Any],
+) -> dict[str, Any]:
+    verdict = win_rate_verdict or {}
+    total = int(verdict.get("total_eligible_matches") or battle_summary.get("eligible_battles") or battle_summary.get("battles_analysed") or 0)
+    wins = int(verdict.get("wins") if verdict.get("wins") is not None else battle_summary.get("wins", 0))
+    losses = int(verdict.get("losses") if verdict.get("losses") is not None else battle_summary.get("losses", 0))
+    draws = int(verdict.get("draws") if verdict.get("draws") is not None else battle_summary.get("draws", 0))
+    win_rate = int(verdict.get("win_rate") if verdict.get("win_rate") is not None else battle_summary.get("win_rate", 0))
+    loss_rate = int(verdict.get("loss_rate") if verdict.get("loss_rate") is not None else battle_summary.get("loss_rate", 0))
+    close_wins = int(verdict.get("close_wins") if verdict.get("close_wins") is not None else clutch_analysis.get("close_wins", 0))
+    close_losses = int(verdict.get("close_losses") if verdict.get("close_losses") is not None else clutch_analysis.get("close_losses", 0))
+    close_total = close_wins + close_losses
+
+    if total < 8:
+        score = min(5, round((losses / max(total, 1)) * 5))
+        roast = "Not enough losses to prosecute responsibly."
+    elif win_rate >= 60:
+        score = min(4, max(0, round((100 - win_rate) / 10)))
+        roast = "Annoyingly, the nonsense is working."
+    elif win_rate >= 50:
+        score = 5 + round((59 - win_rate) / 9 * 4)
+        roast = "The deck is getting away with it often enough to become dangerous."
+    elif win_rate >= 40:
+        score = 10 + round((49 - win_rate) / 9 * 7)
+        roast = "The deck remains legally playable, but the towers have concerns."
+    elif win_rate >= 30:
+        score = 18 + round((39 - win_rate) / 9 * 6)
+        roast = "This is less ladder progression and more stubborn field research."
+    elif total >= 10:
+        score = 25 + round((29 - min(win_rate, 29)) / 29 * 5)
+        roast = "The replay evidence suggests you are conducting a long-term experiment into losing with confidence."
+    else:
+        score = 20 + round((29 - min(win_rate, 29)) / 29 * 4)
+        roast = "The win rate is bad, but the court wants a bigger sample before yelling properly."
+
+    if total >= 8 and close_total >= 5 and close_losses > close_wins:
+        score += min(3, round((close_losses - close_wins) / close_total * 5))
+    score = min(30, score)
+    confidence = confidence_from_sample(total, 8, 15)
+    evidence = [
+        f"Eligible personal-deck record: {wins}-{losses}-{draws}",
+        f"Eligible personal-deck matches: {total}",
+        f"Win rate: {win_rate}% / loss rate: {loss_rate}%",
+        f"Close-game record: {close_wins}-{close_losses}",
+    ]
+    if verdict.get("main_deck_win_rate") is not None:
+        evidence.append(f"Recent main-deck win rate: {verdict.get('main_deck_win_rate')}% across {verdict.get('main_deck_games', 0)} matches")
+    return _score_group(
+        "performance_loss",
+        "Performance / Loss Score",
+        score,
+        30,
+        confidence,
+        total,
+        evidence,
+        "Eligible personal-deck results, loss rate, main-deck performance, and close-game evidence.",
+        roast,
+        raw_score=score,
+    )
+
+
+def calculate_level_reliance_component(level_analysis: dict[str, Any]) -> dict[str, Any]:
+    sample = int(level_analysis.get("level_known_sample_size") or level_analysis.get("eligible_level_matches") or 0)
+    chart = level_analysis.get("level_reliance_chart") or []
+    by_key = {item.get("key"): item for item in chart if isinstance(item, dict)}
+    over = by_key.get("overlevelled", {})
+    even = by_key.get("even", {})
+    under = by_key.get("underlevelled", {})
+    over_matches = int(over.get("matches", 0) or 0)
+    even_matches = int(even.get("matches", 0) or 0)
+    under_matches = int(under.get("matches", 0) or 0)
+    over_wins = int(over.get("wins", level_analysis.get("meaningful_level_advantage_wins", 0)) or 0)
+    over_losses = int(over.get("losses", level_analysis.get("meaningful_level_advantage_losses", 0)) or 0)
+    over_win_rate = int(over.get("win_rate", level_analysis.get("overlevelled_win_rate", 0)) or 0)
+    non_over_matches = even_matches + under_matches
+    non_over_wins = int(even.get("wins", 0) or 0) + int(under.get("wins", 0) or 0)
+    non_over_win_rate = round(non_over_wins / non_over_matches * 100) if non_over_matches else 0
+    total_wins = over_wins + non_over_wins
+
+    if sample < 5:
+        score = min(5, over_losses * 2 + over_wins)
+    elif over_matches < 2:
+        score = min(5, over_losses * 2)
+    else:
+        score = min(6, round(over_matches / max(sample, 1) * 6))
+        if float(over.get("average_level_difference", 0) or 0) >= 1:
+            score += 4
+        if over_win_rate >= non_over_win_rate + 15 and over_wins:
+            score += min(8, max(3, round((over_win_rate - non_over_win_rate) / 5)))
+        if total_wins and over_wins / total_wins >= 0.6:
+            score += 4
+        if over_losses >= 2:
+            score += min(7, 3 + over_losses * 2)
+        if over_losses and over_win_rate < 50:
+            score += 3
+    score = min(25, score)
+    confidence = "low" if sample < 5 or over_matches < 2 else confidence_from_sample(sample, 5, 12)
+    roast = level_analysis.get("level_reliance_roast") or "No level excuse detected. This one is between you and the deck."
+    evidence = [
+        *level_analysis.get("evidence", []),
+        f"Overlevelled win rate: {over_win_rate}%",
+        f"Even/underlevelled combined win rate: {non_over_win_rate}%",
+        f"Average level difference in wins: {level_analysis.get('average_level_difference_in_wins', 0)}",
+        f"Average level difference in losses: {level_analysis.get('average_level_difference_in_losses', 0)}",
+    ]
+    return _score_group(
+        "level_reliance",
+        "Level-Reliance Score",
+        score,
+        25,
+        confidence,
+        sample,
+        evidence,
+        "Eligible level-known standard 1v1 matches only, split into overlevelled, even, and underlevelled records.",
+        roast,
+        raw_score=score,
+    )
+
+
 def calculate_troll_score(
     battle_summary: dict[str, Any],
     deck_analysis: dict[str, Any],
@@ -1119,61 +1344,165 @@ def calculate_troll_score(
     behaviour_analysis: dict[str, Any],
     emotional_support: dict[str, Any],
     clutch_analysis: dict[str, Any],
+    win_rate_verdict: dict[str, Any] | None = None,
+    selector: ExpressionSelector | None = None,
 ) -> dict[str, Any]:
-    candidates: list[dict[str, Any]] = []
-    for issue in deck_analysis.get("structural_issues", []):
-        label = issue.get("label", "")
-        points = {
-            "No clear win condition": 10,
-            "No small spell": 7,
-            "Weak anti-air": 6,
-            "Too many duplicate roles": 5,
-            "Too many expensive cards": 5,
-            "No reliable building answer": 4,
-        }.get(label, 0)
-        if points:
-            add_candidate(candidates, "deck_construction", label, points, [issue.get("explanation", label)], 1, deck_analysis.get("personality_rule", {}).get("confidence", "low"))
-    if deck_analysis.get("deck_identity_score", 100) < 55 and deck_analysis.get("structural_issue_count", 0) >= 3:
-        add_candidate(candidates, "deck_construction", "Multiple current-deck structural issues", 8, [f"Structural issues detected: {deck_analysis.get('structural_issue_count', 0)}"], 1, "medium")
+    active_selector = selector or ExpressionSelector("fraud-score")
+    community = analyse_community_meme_deck(deck_analysis, active_selector)
+    community_group = _score_group(
+        "community_meme",
+        "Community Meme Deck Score",
+        community["score"],
+        45,
+        community["confidence"],
+        community["sample_size"],
+        community["evidence"],
+        "Local community-meme taxonomy with sensible stacking, package bonuses, and exact-meta dampening.",
+        community["roast"],
+        raw_score=community.get("raw_score", community["score"]),
+        extra={
+            "display_label": "Community Meme Score",
+            "matched_cards": community.get("matched_cards", []),
+            "matched_combinations": community.get("matched_combinations", []),
+            "categories": community.get("categories", []),
+            "band": community.get("band"),
+            "disclaimer": community.get("disclaimer", COMMUNITY_MEME_DISCLAIMER),
+        },
+    )
+    performance_group = calculate_performance_loss_component(battle_summary, win_rate_verdict, clutch_analysis)
+    level_group = calculate_level_reliance_component(level_analysis)
+    score_groups = [community_group, performance_group, level_group]
+    score = min(100, sum(group["score"] for group in score_groups))
+    label = "Community score pending"
+    if score <= 14:
+        label = "LEGALLY BORING"
+    elif score <= 29:
+        label = "MILD SUSPECT"
+    elif score <= 44:
+        label = "COMMUNITY SIDE-EYE"
+    elif score <= 59:
+        label = "MID-LADDER ALLEGATIONS"
+    elif score <= 74:
+        label = "CERTIFIED COMMUNITY MENACE"
+    elif score <= 89:
+        label = "PANIC-BUTTON PROFESSIONAL"
+    else:
+        label = "PUBLIC NUISANCE DECK"
+    return {
+        "score": score,
+        "label": label,
+        "components": score_groups,
+        "score_groups": score_groups,
+        "group_caps": {"community_meme": 45, "performance_loss": 30, "level_reliance": 25},
+        "score_formula": {
+            "community_meme": "0-45",
+            "performance_loss": "0-30",
+            "level_reliance": "0-25",
+            "total": "min(100, Community Meme Deck Score + Performance / Loss Score + Level-Reliance Score)",
+        },
+    }
 
-    classification = behaviour_analysis.get("classification")
-    if classification == "PANIC_SWITCHER":
-        add_candidate(candidates, "deck_switching", "Verified panic switching", 12, behaviour_analysis.get("evidence", []), behaviour_analysis.get("post_loss_opportunities", 0), behaviour_analysis.get("confidence", "low"))
-    elif classification == "DECK_HOPPER":
-        add_candidate(candidates, "deck_switching", "Verified deck hopping", 10, behaviour_analysis.get("evidence", []), behaviour_analysis.get("eligible_battles", 0), behaviour_analysis.get("confidence", "low"))
-    elif behaviour_analysis.get("changes_after_losses", 0):
-        add_candidate(candidates, "deck_switching", "Possible post-loss deck changes", 5, behaviour_analysis.get("evidence", []), behaviour_analysis.get("post_loss_opportunities", 0), "low", excluded=behaviour_analysis.get("changes_after_losses", 0) < 3)
 
-    if level_analysis.get("total_losses_with_levels", 0) >= 5 and level_analysis.get("meaningful_level_advantage_losses", 0):
-        add_candidate(candidates, "level_advantage", "Lost with meaningful level advantage", min(20, round(level_analysis["overlevelled_fraud_score"] * 0.2)), level_analysis.get("evidence", []), level_analysis.get("total_losses_with_levels", 0), level_analysis.get("confidence", "low"))
+FRAUD_TIER_BANDS = [
+    {
+        "key": "legally_boring",
+        "min": 0,
+        "max": 14,
+        "title": "LEGALLY BORING",
+        "description": "This deck has avoided serious allegations. Unfortunately, it may actually be normal.",
+        "headlines": [
+            "The evidence tried to start drama, but the deck was mostly normal.",
+            "The court looked for a scandal and found paperwork.",
+        ],
+    },
+    {
+        "key": "mild_suspect",
+        "min": 15,
+        "max": 29,
+        "title": "MILD SUSPECT",
+        "description": "A few choices deserve a raised eyebrow, not a full hearing.",
+        "headlines": [
+            "A few cards are acting suspicious, but nobody is calling the tower police yet.",
+            "There is smoke, but it might just be Wizard asking for attention.",
+        ],
+    },
+    {
+        "key": "community_side_eye",
+        "min": 30,
+        "max": 44,
+        "title": "COMMUNITY SIDE-EYE",
+        "description": "The deck has entered the group chat and nobody is pretending to be surprised.",
+        "headlines": [
+            "The deck walked into the room and the group chat immediately got louder.",
+            "This is not illegal. It is just very noticeable.",
+        ],
+    },
+    {
+        "key": "mid_ladder_allegations",
+        "min": 45,
+        "max": 59,
+        "title": "MID-LADDER ALLEGATIONS",
+        "description": "Several cards appear to have been selected during a stressful moment.",
+        "headlines": [
+            "Several choices here look like they were made during tower panic.",
+            "The allegations are mid-ladder, but the receipts brought shoes.",
+        ],
+    },
+    {
+        "key": "certified_community_menace",
+        "min": 60,
+        "max": 74,
+        "title": "CERTIFIED COMMUNITY MENACE",
+        "description": "The deck does not violate any rules. It does, however, violate several social agreements.",
+        "headlines": [
+            "The app cannot ban this deck, but it did sigh heavily.",
+            "This is legal gameplay with suspicious community side effects.",
+        ],
+    },
+    {
+        "key": "panic_button_professional",
+        "min": 75,
+        "max": 89,
+        "title": "PANIC-BUTTON PROFESSIONAL",
+        "description": "You have assembled enough emergency cards to make normal decision-making optional.",
+        "headlines": [
+            "Two panic buttons and no shame would be the polite summary.",
+            "The deck saw normal interaction and filed for emergency powers.",
+        ],
+    },
+    {
+        "key": "public_nuisance_deck",
+        "min": 90,
+        "max": 100,
+        "title": "PUBLIC NUISANCE DECK",
+        "description": "The app cannot ban this deck, but it has submitted a strongly worded complaint.",
+        "headlines": [
+            "The deck is legal, but several towers have requested a welfare check.",
+            "This is a public nuisance deck with a battle-log alibi.",
+        ],
+    },
+]
 
-    predator = matchup_analysis.get("natural_predator", {})
-    if predator.get("matches", 0) >= 4 and predator.get("excess_loss_rate", 0) > 0:
-        add_candidate(candidates, "matchup_weakness", "Detected matchup pattern", min(15, max(4, round(predator["excess_loss_rate"] / 3))), predator.get("evidence", []), predator.get("matches", 0), predator.get("confidence", "low"))
 
-    close_total = clutch_analysis.get("close_wins", 0) + clutch_analysis.get("close_losses", 0)
-    if close_total >= 5 and clutch_analysis.get("close_losses", 0) > clutch_analysis.get("close_wins", 0):
-        add_candidate(candidates, "close_game", "Close-game losses", min(10, round(clutch_analysis["close_losses"] / close_total * 10)), clutch_analysis.get("evidence", []), close_total, clutch_analysis.get("confidence", "low"))
-
-    if emotional_support.get("detected"):
-        add_candidate(candidates, "deck_switching", "Emotional support card detected", 6, emotional_support.get("evidence", []), emotional_support.get("sample_size", 0), emotional_support.get("confidence", "low"))
-
-    components = apply_group_caps(candidates)
-    score = min(100, sum(component["applied_points"] for component in components if not component.get("excluded")))
-    label = "Respectable citizen" if score <= 20 else "Mildly fraudulent" if score <= 40 else "Questionable gameplay" if score <= 60 else "Midladder incident" if score <= 80 else "National emergency"
-    return {"score": score, "label": label, "components": components, "group_caps": {"deck_construction": 15, "deck_switching": 12, "level_advantage": 20, "matchup_weakness": 15, "close_game": 10}}
+def fraud_tier_for_score(score: int, confidence: str) -> dict[str, Any]:
+    if confidence == "low":
+        return {
+            "key": "insufficient_evidence",
+            "title": "INSUFFICIENT EVIDENCE, SUSPICIOUS VIBES",
+            "description": "The battle log is too short for a conviction, but the deck has been noted.",
+            "headlines": [
+                "The court lacks evidence, but the vibes have been photographed.",
+                "The battle log is short; the suspicion is not.",
+            ],
+        }
+    for band in FRAUD_TIER_BANDS:
+        if band["min"] <= score <= band["max"]:
+            return band
+    return FRAUD_TIER_BANDS[-1]
 
 
 def fraud_tier_key(score: int) -> str:
-    if score <= 20:
-        return "respectable"
-    if score <= 40:
-        return "mild"
-    if score <= 60:
-        return "questionable"
-    if score <= 80:
-        return "high"
-    return "extreme"
+    return fraud_tier_for_score(score, "medium")["key"]
 
 
 def build_fraud_score(
@@ -1188,57 +1517,58 @@ def build_fraud_score(
     selector: ExpressionSelector,
 ) -> dict[str, Any]:
     score = int(troll_score["score"])
-    tier_key = fraud_tier_key(score)
-    tier_copy = TIER_COPY[tier_key]
+    score_groups = list(troll_score.get("score_groups") or troll_score.get("components") or [])
     contributors = []
-    for component in sorted(troll_score["components"], key=lambda item: item.get("applied_points", item.get("points", 0)), reverse=True):
-        copy = CONTRIBUTOR_COPY.get(component["label"], {})
+    for component in score_groups:
         contributors.append(
             {
+                "key": component.get("key", component.get("group", component.get("label", "score_component"))),
                 "label": component["label"],
                 "group": component["group"],
-                "raw_candidate_points": component["raw_candidate_points"],
+                "raw_score": component.get("raw_score", component.get("raw_candidate_points", component.get("points", 0))),
+                "raw_candidate_points": component.get("raw_candidate_points", component.get("raw_score", component.get("points", 0))),
                 "applied_points": component.get("applied_points", component.get("points", 0)),
                 "points": component.get("applied_points", component.get("points", 0)),
-                "description": component.get("description") or copy.get("description") or "Evidence-backed score contributor.",
+                "score": component.get("score", component.get("points", 0)),
+                "max_score": component.get("max_score", component.get("max_points", 0)),
+                "max_points": component.get("max_points", component.get("max_score", 0)),
+                "description": component.get("description") or "Evidence-backed score contributor.",
                 "evidence": component.get("evidence", []),
                 "evidence_count": len(component.get("evidence", [])),
                 "sample_size": component.get("sample_size", 0),
                 "confidence": component.get("confidence", "low"),
                 "excluded": component.get("excluded", False),
-                "roast": selector.choose(copy.get("roasts", ["The evidence filed a small but readable complaint."]), f"fraud:contributor:{component['label']}"),
+                "roast": component.get("roast", "The evidence filed a small but readable complaint."),
+                "display_label": component.get("display_label", component.get("label")),
+                "matched_cards": component.get("matched_cards", []),
+                "matched_combinations": component.get("matched_combinations", []),
+                "categories": component.get("categories", []),
+                "band": component.get("band"),
             }
         )
-    if not contributors:
-        contributors.append(
-            {
-                "label": "Evidence stayed boring",
-                "group": "none",
-                "raw_candidate_points": 0,
-                "applied_points": 0,
-                "points": 0,
-                "description": "No major contributor crossed the evidence threshold.",
-                "evidence": ["No score components crossed the threshold"],
-                "evidence_count": 1,
-                "sample_size": battle_summary.get("eligible_battles", 0),
-                "confidence": "low",
-                "excluded": False,
-                "roast": "Suspicion noted; conviction denied due to insufficient battle logs.",
-            }
-        )
-    confidence_values = [item["confidence"] for item in contributors if item["points"] > 0]
-    confidence = "low" if not confidence_values or "low" in confidence_values else "medium" if "medium" in confidence_values else "high"
+    positive = [item for item in contributors if item["points"] > 0]
+    if battle_summary.get("eligible_battles", battle_summary.get("battles_analysed", 0)) < 8:
+        confidence = "low"
+    else:
+        confidence_values = [item["confidence"] for item in positive]
+        confidence = "low" if not confidence_values else "medium" if "low" in confidence_values or "medium" in confidence_values else "high"
+    tier_copy = fraud_tier_for_score(score, confidence)
+    headline = selector.choose(tier_copy["headlines"], f"fraud:{tier_copy['key']}:headline")
+    receipts = [evidence for contributor in contributors for evidence in contributor["evidence"]]
     return {
         "score": score,
-        "tier": selector.choose(tier_copy["labels"], f"fraud:{tier_key}:label"),
-        "tier_key": tier_key,
-        "tier_description": selector.choose(tier_copy["descriptions"], f"fraud:{tier_key}:description"),
-        "headline_roast": selector.choose(tier_copy["headlines"], f"fraud:{tier_key}:headline"),
+        "tier": tier_copy["title"],
+        "tier_key": tier_copy["key"],
+        "tier_description": tier_copy["description"],
+        "headline_roast": headline,
         "confidence": confidence,
         "overall_confidence_note": f"Overall confidence: {confidence.title()} - based on {battle_summary.get('eligible_battles', 0)} eligible personal-deck matches with per-claim thresholds applied.",
-        "contributors": contributors[:7],
-        "score_receipts": [evidence for contributor in contributors for evidence in contributor["evidence"]],
+        "contributors": contributors,
+        "score_groups": contributors,
+        "score_receipts": receipts,
         "group_caps": troll_score.get("group_caps", {}),
+        "score_formula": troll_score.get("score_formula", {}),
+        "score_summary": f"{contributors[0]['label']} {contributors[0]['points']}/{contributors[0]['max_points']}, {contributors[1]['label']} {contributors[1]['points']}/{contributors[1]['max_points']}, {contributors[2]['label']} {contributors[2]['points']}/{contributors[2]['max_points']}" if len(contributors) >= 3 else "",
     }
 
 
@@ -1407,7 +1737,7 @@ class AnalysisService:
         favourite_card_analysis = analyse_favourite_card(player_tag, normalized, deck_analysis, self.card_service)
         feared_card_analysis = analyse_feared_card(player_tag, normalized, self.card_service)
         win_rate_verdict = analyse_win_rate_verdict(player_tag, normalized, behaviour_analysis)
-        troll_score = calculate_troll_score(battle_summary, deck_analysis, matchup_analysis, level_analysis, behaviour_analysis, emotional_support, clutch_analysis)
+        troll_score = calculate_troll_score(battle_summary, deck_analysis, matchup_analysis, level_analysis, behaviour_analysis, emotional_support, clutch_analysis, win_rate_verdict, selector)
         fraud_score = build_fraud_score(troll_score, battle_summary, deck_analysis, matchup_analysis, level_analysis, behaviour_analysis, emotional_support, clutch_analysis, selector)
         deck_personality = build_deck_personality(deck_analysis, selector)
         personality_report = build_personality_report(deck_analysis, battle_summary, matchup_analysis, level_analysis, behaviour_analysis, emotional_support, main_character, fraud_score, selector, goblin_mode)

@@ -1,0 +1,299 @@
+{
+  "version": "community-meme-taxonomy-v1",
+  "last_reviewed": "2026-07-01",
+  "disclaimer": "Community Meme Score reflects recurring player-community jokes about card packages. It is not an objective measure of skill.",
+  "categories": {
+    "panic_button": "Cards commonly joked about as emergency defence buttons.",
+    "midladder_landlord": "Cards associated with mid-ladder defensive comfort picks.",
+    "defensive_spam": "Lane-filling or structure-heavy cards some players find annoying.",
+    "overlevel_bully": "Cards that become louder when overlevelled in ladder contexts.",
+    "bridge_spam": "Fast pressure cards that repeatedly ask the tower the same question.",
+    "annoyance_engine": "Cards that generate repeated nuisance value or force awkward answers.",
+    "bait_menace": "Packages that turn small-spell timing into customer support.",
+    "copy_paste_meta": "Recognised packages with strong community identity.",
+    "high_elixir_prayer": "Heavy commitments where the plan can become hope with a receipt.",
+    "tower_pressure_spam": "Repeated tower-pressure packages.",
+    "group_project_deck": "Several unrelated meme traits stacked without a clear archetype."
+  },
+  "cards": [
+    {
+      "id": "mega_knight",
+      "name": "Mega Knight",
+      "categories": ["panic_button", "midladder_landlord"],
+      "meme_weight": 8,
+      "roast_directions": [
+        "Emergency roof-collapse button",
+        "Dropped from the ceiling whenever a normal defence sounded difficult",
+        "Mega Knight customer-support department"
+      ],
+      "source_notes": "Mega Knight is commonly discussed as an overlevelled or mid-ladder panic-button meme, while counterplay and balance context remain subjective.",
+      "source_confidence": "medium",
+      "last_reviewed": "2026-07-01",
+      "disclaimer_text": "This is a community joke tag, not proof of objective card strength or player skill."
+    },
+    {
+      "id": "royal_recruits",
+      "name": "Royal Recruits",
+      "categories": ["defensive_spam", "lane_split_landlord"],
+      "meme_weight": 8,
+      "roast_directions": [
+        "Eight shielded tenants arriving without an appointment",
+        "Defence by zoning ordinance",
+        "Royal Recruits were deployed because apparently one lane was not annoying enough"
+      ],
+      "source_notes": "Royal Recruits are often perceived by some players as defensive lane spam or unfun lane-filling pressure, but that is a subjective complaint.",
+      "source_confidence": "medium",
+      "last_reviewed": "2026-07-01",
+      "disclaimer_text": "The tag records a player-community stereotype, not an official card judgement."
+    },
+    {
+      "id": "elite_barbarians",
+      "name": "Elite Barbarians",
+      "categories": ["overlevel_bully", "bridge_spam"],
+      "meme_weight": 7,
+      "roast_directions": [
+        "Two angry gym bros sprinting at the bridge",
+        "The plan was apparently just louder Barbarians"
+      ],
+      "source_notes": "Elite Barbarians are a recurring ladder meme when overlevelled bridge pressure is the whole conversation.",
+      "source_confidence": "medium",
+      "last_reviewed": "2026-07-01",
+      "disclaimer_text": "This is playful community shorthand, not a balance claim."
+    },
+    {
+      "id": "wizard",
+      "name": "Wizard",
+      "categories": ["midladder_support", "splash_panic"],
+      "meme_weight": 6,
+      "roast_directions": [
+        "Five-elixir fireball intern",
+        "You hired Wizard because subtlety was not in the budget"
+      ],
+      "source_notes": "Wizard is often framed as a mid-ladder support-card meme, especially when copied into expensive splash piles.",
+      "source_confidence": "medium",
+      "last_reviewed": "2026-07-01",
+      "disclaimer_text": "This describes a meme context, not a universal weakness."
+    },
+    {
+      "id": "witch",
+      "name": "Witch",
+      "categories": ["skeleton_group_project", "annoyance_engine"],
+      "meme_weight": 6,
+      "roast_directions": [
+        "Skeleton daycare supervisor",
+        "Summoning paperwork until the opponent gets bored"
+      ],
+      "source_notes": "Witch is commonly joked about as skeleton paperwork in mid-ladder decks, with context-dependent usefulness.",
+      "source_confidence": "medium",
+      "last_reviewed": "2026-07-01",
+      "disclaimer_text": "Community-meme tag only."
+    },
+    {
+      "id": "firecracker",
+      "name": "Firecracker",
+      "categories": ["annoyance_engine"],
+      "meme_weight": 6,
+      "roast_directions": [
+        "Backwards-walking HR complaint",
+        "One rocket, three tower activations, somehow still invited back"
+      ],
+      "source_notes": "Firecracker is a frequent annoyance meme because of long-range splash and movement quirks.",
+      "source_confidence": "medium",
+      "last_reviewed": "2026-07-01",
+      "disclaimer_text": "This is not an objective measure of skill."
+    },
+    {
+      "id": "hog_rider",
+      "name": "Hog Rider",
+      "categories": ["tower_pressure_spam"],
+      "meme_weight": 5,
+      "roast_directions": [
+        "Repeatedly yelling at a building",
+        "The same man on a pig has filed another tower complaint"
+      ],
+      "source_notes": "Hog Rider is a classic tower-pressure meme; recognised cycle decks should be treated as real archetypes, not automatic fraud.",
+      "source_confidence": "medium",
+      "last_reviewed": "2026-07-01",
+      "disclaimer_text": "Context matters; this tag is playful."
+    },
+    {
+      "id": "electro_giant",
+      "name": "Electro Giant",
+      "categories": ["panic_button", "high_elixir_prayer"],
+      "meme_weight": 7,
+      "roast_directions": [
+        "Walking electrical outage",
+        "You spent eight elixir on a mobile power cut and hoped diplomacy would follow"
+      ],
+      "source_notes": "Electro Giant is often joked about as a huge all-in walking outage.",
+      "source_confidence": "medium",
+      "last_reviewed": "2026-07-01",
+      "disclaimer_text": "Community joke tag only."
+    },
+    {
+      "id": "pekka",
+      "name": "P.E.K.K.A",
+      "categories": ["high_elixir_prayer", "panic_button"],
+      "meme_weight": 6,
+      "roast_directions": [
+        "One massive adult solving a card game by standing on it",
+        "The elixir bar has been declared a non-renewable resource"
+      ],
+      "source_notes": "P.E.K.K.A can be a legitimate tank answer; the meme tag applies when stacked with other huge panic cards.",
+      "source_confidence": "medium",
+      "last_reviewed": "2026-07-01",
+      "disclaimer_text": "Do not treat the tag as a standalone skill claim."
+    },
+    {
+      "id": "royal_giant",
+      "name": "Royal Giant",
+      "categories": ["tower_pressure_spam", "copy_paste_meta"],
+      "meme_weight": 5,
+      "roast_directions": [
+        "Tower paperwork from six tiles away",
+        "A building-targeting complaint in crown form"
+      ],
+      "source_notes": "Royal Giant has a long-running community identity as tower pressure, but recognised control shells can be real meta decks.",
+      "source_confidence": "medium",
+      "last_reviewed": "2026-07-01",
+      "disclaimer_text": "Context-sensitive community meme tag."
+    },
+    {
+      "id": "x_bow",
+      "name": "X-Bow",
+      "categories": ["defensive_spam", "copy_paste_meta"],
+      "meme_weight": 6,
+      "roast_directions": [
+        "A building applied for tower access and you approved the permit",
+        "You turned Clash Royale into municipal planning"
+      ],
+      "source_notes": "X-Bow is a recognised archetype and a long-running frustration meme; score it with context.",
+      "source_confidence": "medium",
+      "last_reviewed": "2026-07-01",
+      "disclaimer_text": "This is a meme receipt, not a balance finding."
+    },
+    {
+      "id": "mortar",
+      "name": "Mortar",
+      "categories": ["annoyance_engine", "long_range_landlord"],
+      "meme_weight": 5,
+      "roast_directions": [
+        "You brought artillery to a card game",
+        "The tower is being evicted from another postcode"
+      ],
+      "source_notes": "Mortar is both a real archetype and an annoyance meme depending on package.",
+      "source_confidence": "medium",
+      "last_reviewed": "2026-07-01",
+      "disclaimer_text": "Context-sensitive community meme tag."
+    },
+    {
+      "id": "lava_hound",
+      "name": "Lava Hound",
+      "categories": ["high_elixir_prayer", "air_mail"],
+      "meme_weight": 5,
+      "roast_directions": [
+        "Floating dog aviation department",
+        "Airspace violation paperwork"
+      ],
+      "source_notes": "Lava Hound becomes a meme mostly as part of air-mail packages like LavaLoon.",
+      "source_confidence": "medium",
+      "last_reviewed": "2026-07-01",
+      "disclaimer_text": "Package context matters."
+    },
+    {
+      "id": "balloon",
+      "name": "Balloon",
+      "categories": ["air_mail", "tower_pressure_spam"],
+      "meme_weight": 5,
+      "roast_directions": [
+        "Bomb delivery with no customer-service number",
+        "Aviation, but make it tower damage"
+      ],
+      "source_notes": "Balloon is a pressure card with meme context when paired into repeated air-mail all-ins.",
+      "source_confidence": "medium",
+      "last_reviewed": "2026-07-01",
+      "disclaimer_text": "Community joke tag only."
+    }
+  ],
+  "combinations": [
+    {
+      "id": "mega_knight_royal_recruits",
+      "cards": ["Mega Knight", "Royal Recruits"],
+      "category": "certified_midladder_landlord_package",
+      "bonus": 16,
+      "roast_directions": [
+        "Mega Knight plus Royal Recruits. Bro did not build a deck; bro built a fucking housing estate.",
+        "You dropped a landlord from the ceiling, then hired eight shielded tenants to block both lanes.",
+        "This is the kind of deck that sees a normal interaction and responds by filing a zoning complaint.",
+        "Mega Knight and Royal Recruits together: two panic buttons, one elixir bar, zero desire to have a normal match.",
+        "Certified mid-ladder landlord behaviour."
+      ],
+      "source_notes": "A deliberately stronger package because both cards in the same current or recent-main deck create a clear defensive-spam/panic-button meme pattern.",
+      "source_confidence": "medium",
+      "last_reviewed": "2026-07-01",
+      "disclaimer_text": "Still a joke receipt, not an official skill verdict."
+    },
+    {
+      "id": "goblin_barrel_princess_goblin_gang",
+      "cards": ["Goblin Barrel", "Princess", "Goblin Gang"],
+      "category": "bait_menace",
+      "bonus": 10,
+      "roast_directions": [
+        "Your deck has become a customer-service test for people holding The Log.",
+        "You are sending goblins through the post and calling it strategy."
+      ],
+      "source_notes": "Classic bait packages are real archetypes, but also recurring community annoyance memes.",
+      "source_confidence": "medium",
+      "last_reviewed": "2026-07-01",
+      "disclaimer_text": "Recognised archetypes should not be scored as max fraud by default."
+    },
+    {
+      "id": "pekka_mega_knight",
+      "cards": ["P.E.K.K.A", "Mega Knight"],
+      "category": "high_elixir_prayer",
+      "bonus": 11,
+      "roast_directions": [
+        "Two massive adults solving a card game by standing on it.",
+        "The elixir bar has been declared a non-renewable resource."
+      ],
+      "source_notes": "Heavy-card stacking can be a community meme when two large emergency cards share one deck.",
+      "source_confidence": "medium",
+      "last_reviewed": "2026-07-01",
+      "disclaimer_text": "Context-sensitive package tag."
+    },
+    {
+      "id": "royal_giant_fisherman",
+      "cards": ["Royal Giant", "Fisherman"],
+      "category": "copy_paste_meta",
+      "bonus": 7,
+      "roast_directions": [
+        "The fisherman dragged the game plan into place and Royal Giant did the paperwork."
+      ],
+      "source_notes": "Royal Giant plus Fisherman is a recognised shell with both meta legitimacy and community-meme identity.",
+      "source_confidence": "medium",
+      "last_reviewed": "2026-07-01",
+      "disclaimer_text": "Do not over-score exact recognised meta shells."
+    },
+    {
+      "id": "lava_hound_balloon",
+      "cards": ["Lava Hound", "Balloon"],
+      "category": "air_mail",
+      "bonus": 9,
+      "roast_directions": [
+        "Airspace violation package.",
+        "You sent a floating dog and a bomb toward the tower and called it aviation."
+      ],
+      "source_notes": "LavaLoon is a real archetype and a familiar all-in air-pressure joke.",
+      "source_confidence": "medium",
+      "last_reviewed": "2026-07-01",
+      "disclaimer_text": "Package context matters."
+    }
+  ],
+  "score_bands": [
+    {"min": 0, "max": 8, "label": "Community-approved or insufficient evidence"},
+    {"min": 9, "max": 18, "label": "Mildly suspicious card choices"},
+    {"min": 19, "max": 30, "label": "Strong mid-ladder allegations"},
+    {"min": 31, "max": 38, "label": "Panic-button or defensive-spam stack"},
+    {"min": 39, "max": 45, "label": "Certified Community Menace"}
+  ]
+}

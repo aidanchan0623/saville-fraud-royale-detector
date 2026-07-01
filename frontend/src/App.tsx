@@ -3,17 +3,14 @@ import { motion } from "framer-motion";
 import {
   BadgeAlert,
   Copy,
-  Crosshair,
   Crown,
   Download,
   Flame,
-  Gauge,
   ImageOff,
   ReceiptText,
   RotateCcw,
   Search,
   Share2,
-  ShieldAlert,
   Sparkles,
   Swords,
   Trophy,
@@ -23,7 +20,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Legend,
+  LabelList,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -574,6 +571,21 @@ const DEFAULT_REPORT: Report = {
   },
   level_analysis: {
     loss_counts: { underlevelled: 0, even: 0, overlevelled: 0 },
+    win_counts: { underlevelled: 0, even: 0, overlevelled: 0 },
+    draw_counts: { underlevelled: 0, even: 0, overlevelled: 0 },
+    result_counts: {},
+    level_reliance_chart: [],
+    level_known_sample_size: 0,
+    meaningful_level_advantage_wins: 0,
+    meaningful_level_advantage_losses: 0,
+    average_level_difference: 0,
+    average_level_difference_in_wins: 0,
+    average_level_difference_in_losses: 0,
+    overlevelled_win_rate: 0,
+    even_level_win_rate: 0,
+    underlevelled_win_rate: 0,
+    level_chart_visible: false,
+    level_reliance_roast: "Not enough level-known 1v1 matches to judge whether upgrades are carrying.",
     percentages: { matchmaking_conspiracy: 0, fair_fight_failure: 0, certified_skill_issue: 0 },
     overlevelled_fraud_score: 0,
     tier: "Insufficient level evidence",
@@ -677,7 +689,15 @@ const DEFAULT_REPORT: Report = {
     headline_roast: "Suspicion noted; conviction denied due to incomplete data.",
     confidence: "low",
     contributors: [],
+    score_groups: [],
     score_receipts: ["Fraud Score unavailable or incomplete."],
+    group_caps: { community_meme: 45, performance_loss: 30, level_reliance: 25 },
+    score_formula: {
+      community_meme: "0-45",
+      performance_loss: "0-30",
+      level_reliance: "0-25",
+      total: "min(100, Community Meme Deck Score + Performance / Loss Score + Level-Reliance Score)",
+    },
   },
   personality_report: {
     section_title: "Evidence-Based Personality Report",
@@ -826,6 +846,8 @@ function withReportDefaults(rawReport: unknown): Report {
   const predator = isRecord(matchup.natural_predator) ? matchup.natural_predator : {};
   const level = isRecord(raw.level_analysis) ? raw.level_analysis : {};
   const lossCounts = isRecord(level.loss_counts) ? level.loss_counts : {};
+  const winCounts = isRecord(level.win_counts) ? level.win_counts : {};
+  const drawCounts = isRecord(level.draw_counts) ? level.draw_counts : {};
   const percentages = isRecord(level.percentages) ? level.percentages : {};
   const behaviour = isRecord(raw.behaviour_analysis) ? raw.behaviour_analysis : {};
   const clutch = isRecord(raw.clutch_analysis) ? raw.clutch_analysis : {};
@@ -836,6 +858,7 @@ function withReportDefaults(rawReport: unknown): Report {
   const feared = isRecord(raw.feared_card_analysis) ? raw.feared_card_analysis : {};
   const winRate = isRecord(raw.win_rate_verdict) ? raw.win_rate_verdict : {};
   const narrative = isRecord(raw.roast_narrative) ? raw.roast_narrative : {};
+  const emptyLevelCounts = { underlevelled: 0, even: 0, overlevelled: 0 };
 
   const normalized: Report = {
     ...DEFAULT_REPORT,
@@ -888,6 +911,10 @@ function withReportDefaults(rawReport: unknown): Report {
       ...DEFAULT_REPORT.level_analysis,
       ...level,
       loss_counts: { ...DEFAULT_REPORT.level_analysis.loss_counts, ...lossCounts },
+      win_counts: { ...emptyLevelCounts, ...winCounts },
+      draw_counts: { ...emptyLevelCounts, ...drawCounts },
+      result_counts: isRecord(level.result_counts) ? level.result_counts as Report["level_analysis"]["result_counts"] : DEFAULT_REPORT.level_analysis.result_counts,
+      level_reliance_chart: safeArray<NonNullable<Report["level_analysis"]["level_reliance_chart"]>[number]>(level.level_reliance_chart),
       percentages: { ...DEFAULT_REPORT.level_analysis.percentages, ...percentages },
     },
     behaviour_analysis: {
@@ -934,6 +961,7 @@ function withReportDefaults(rawReport: unknown): Report {
       ...DEFAULT_REPORT.fraud_score,
       ...fraud,
       contributors: safeArray<Report["fraud_score"]["contributors"][number]>(fraud.contributors),
+      score_groups: safeArray<Report["fraud_score"]["contributors"][number]>(fraud.score_groups),
       score_receipts: safeArray<string>(fraud.score_receipts),
     },
     personality_report: {
@@ -957,6 +985,55 @@ function withReportDefaults(rawReport: unknown): Report {
   }
 
   return normalized;
+}
+
+type ScoreBarRow = {
+  label: string;
+  percent: number;
+  score: number;
+  max: number;
+  display: string;
+  description: string;
+  confidence: string;
+  sampleSize: number;
+};
+
+type LevelBarRow = {
+  key: string;
+  label: string;
+  wins: number;
+  losses: number;
+  draws: number;
+  matches: number;
+  winRate: number;
+  averageLevelDifference: number;
+};
+
+function ScoreGroupTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: ScoreBarRow }> }) {
+  if (!active || !payload?.length) return null;
+  const row = payload[0].payload;
+  return (
+    <div className="max-w-xs rounded-lg border border-white/15 bg-slate-950 p-3 text-sm shadow-2xl">
+      <div className="font-black uppercase text-white">{row.label}</div>
+      <div className="mt-1 font-black text-amber-100">{row.display}</div>
+      <p className="mt-2 text-xs font-semibold leading-5 text-white/70">{row.description}</p>
+      <p className="mt-2 text-xs font-bold uppercase text-white/45">{row.confidence} confidence - sample {row.sampleSize}</p>
+    </div>
+  );
+}
+
+function LevelRelianceTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: LevelBarRow }> }) {
+  if (!active || !payload?.length) return null;
+  const row = payload[0].payload;
+  return (
+    <div className="max-w-xs rounded-lg border border-white/15 bg-slate-950 p-3 text-sm shadow-2xl">
+      <div className="font-black uppercase text-white">{row.label}</div>
+      <div className="mt-1 font-black text-emerald-100">{row.wins} wins / {row.losses} losses</div>
+      <p className="mt-2 text-xs font-semibold leading-5 text-white/70">
+        {row.matches} matches, {row.winRate}% win rate, average level difference {row.averageLevelDifference >= 0 ? "+" : ""}{row.averageLevelDifference}
+      </p>
+    </div>
+  );
 }
 
 function ErrorFallback({ error, onReset, onRetry }: { error: Error | null; onReset: () => void; onRetry: () => void }) {
@@ -1005,33 +1082,35 @@ class ReportErrorBoundary extends Component<{ children: ReactNode; onReset: () =
 
 function ReportDashboard({ report: rawReport, onReset }: { report: Report; onReset: () => void }) {
   const report = withReportDefaults(rawReport);
-  const traumaData = report.matchup_analysis.traumatic_cards.slice(0, 6).map((item) => ({
-    card: item.card,
-    lossRate: item.loss_rate,
-    faced: item.faced,
-  }));
-  const usedData = report.deck_analysis.most_used_cards.slice(0, 7).map((item) => ({
-    card: item.card,
-    used: item.used,
-    winRate: item.win_rate,
-  }));
-  const contributorData = report.fraud_score.contributors.map((item) => ({
+  const scoreSource = report.fraud_score.score_groups?.length ? report.fraud_score.score_groups : report.fraud_score.contributors;
+  const fallbackMax: Record<string, number> = { community_meme: 45, performance_loss: 30, level_reliance: 25 };
+  const scoreGroupData: ScoreBarRow[] = scoreSource.slice(0, 3).map((item) => {
+    const key = item.key ?? item.group ?? item.label;
+    const score = Number(item.score ?? item.applied_points ?? item.points ?? 0);
+    const max = Number(item.max_score ?? item.max_points ?? fallbackMax[key] ?? 100);
+    return {
+      label: item.label,
+      percent: max > 0 ? Math.round(Math.min(100, Math.max(0, score / max * 100))) : 0,
+      score,
+      max,
+      display: `${score}/${max}`,
+      description: item.description,
+      confidence: item.confidence ?? "low",
+      sampleSize: item.sample_size ?? 0,
+    };
+  });
+  const levelSample = report.level_analysis.level_known_sample_size ?? report.level_analysis.eligible_level_matches ?? 0;
+  const levelRelianceData: LevelBarRow[] = (report.level_analysis.level_reliance_chart ?? []).map((item) => ({
+    key: item.key,
     label: item.label,
-    points: item.applied_points ?? item.points,
+    wins: item.wins,
+    losses: item.losses,
+    draws: item.draws,
+    matches: item.matches,
+    winRate: item.win_rate,
+    averageLevelDifference: item.average_level_difference,
   }));
-  const levelData = [
-    {
-      name: "Loss type",
-      Underlevelled: report.level_analysis.loss_counts.underlevelled,
-      "Even level": report.level_analysis.loss_counts.even,
-      Overlevelled: report.level_analysis.loss_counts.overlevelled,
-    },
-  ];
-  const trendData = report.battle_summary.timeline.slice(0, 12).reverse().map((battle, index) => ({
-    match: index + 1,
-    result: battle.result === "win" ? 1 : battle.result === "loss" ? -1 : 0,
-    crowns: `${battle.playerCrowns}-${battle.opponentCrowns}`,
-  }));
+  const visibleScore = Math.max(0, Math.min(100, report.fraud_score.score));
   const recentMainDeck = report.deck_analysis.recent_main_deck ?? {
     cards: report.deck_analysis.most_common_deck.cards,
     card_details: [],
@@ -1093,27 +1172,71 @@ function ReportDashboard({ report: rawReport, onReset }: { report: Report; onRes
                 </div>
               </div>
               <div className="mt-5 h-4 overflow-hidden rounded-full bg-white/10">
-                <div className="h-full bg-gradient-to-r from-emerald-300 via-amber-300 to-rose-400" style={{ width: `${report.fraud_score.score}%` }} />
+                <div className="h-full bg-gradient-to-r from-emerald-300 via-amber-300 to-rose-400" style={{ width: `${visibleScore}%` }} />
               </div>
               <h3 className="mt-5 text-3xl font-black uppercase text-white">{report.fraud_score.tier}</h3>
               <p className="mt-2 text-sm font-semibold leading-6 text-white/70">{report.fraud_score.tier_description}</p>
               <p className="mt-4 text-xl font-black leading-8 text-amber-100">"{report.roast_narrative.final_verdict || report.fraud_score.headline_roast}"</p>
-              <div className="mt-5 space-y-3">
-                {report.fraud_score.contributors.slice(0, 5).map((item) => (
-                  <div key={item.label} className="rounded-lg border border-white/10 bg-white/5 p-3">
-                    <div className="flex items-center justify-between gap-4">
-                      <div>
-                        <div className="font-black text-white">{item.label}</div>
-                        <div className="mt-1 text-[11px] font-black uppercase text-white/45">{item.group ?? "evidence"} - {item.confidence ?? "low"} confidence</div>
+              <div className="mt-6 grid gap-5 xl:grid-cols-2">
+                <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+                  <div className="text-xs font-black uppercase text-amber-100">Why The Score Exists</div>
+                  <div className="mt-3 h-56">
+                    {scoreGroupData.length ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={scoreGroupData} layout="vertical" margin={{ left: 8, right: 42, top: 8, bottom: 8 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.08)" />
+                          <XAxis type="number" domain={[0, 100]} hide />
+                          <YAxis dataKey="label" type="category" width={154} stroke="#cbd5e1" tick={{ fontSize: 11 }} />
+                          <Tooltip content={<ScoreGroupTooltip />} cursor={{ fill: "rgba(255,255,255,.05)" }} />
+                          <Bar dataKey="percent" fill="#facc15" radius={[0, 6, 6, 0]}>
+                            <LabelList dataKey="display" position="right" fill="#f8fafc" fontSize={12} fontWeight={900} />
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex h-full items-center justify-center rounded-lg border border-white/10 bg-slate-950/60 p-4 text-center text-sm font-bold text-white/60">
+                        Score groups were empty, so the chart stayed quiet instead of exploding.
                       </div>
-                      <div className="text-right">
-                        <div className="text-lg font-black text-rose-300">+{item.applied_points ?? item.points}</div>
-                        {item.raw_candidate_points !== undefined && item.raw_candidate_points !== (item.applied_points ?? item.points) && (
-                          <div className="text-[11px] font-bold text-white/45">raw +{item.raw_candidate_points}</div>
-                        )}
-                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="text-xs font-black uppercase text-emerald-100">Levels Did Not Save You</div>
+                      <p className="mt-1 text-xs font-bold text-white/45">Wins and losses by average card-level bucket.</p>
                     </div>
-                    <p className="mt-1 text-sm font-semibold leading-6 text-white/60">{item.description}</p>
+                    <div className="rounded-md border border-white/10 bg-slate-950/70 px-2 py-1 text-[10px] font-black uppercase text-white/55">sample {levelSample}</div>
+                  </div>
+                  {levelSample >= 5 && levelRelianceData.length ? (
+                    <div className="mt-3 h-56">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={levelRelianceData} margin={{ left: 0, right: 8, top: 10, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.08)" />
+                          <XAxis dataKey="label" stroke="#cbd5e1" tick={{ fontSize: 11 }} />
+                          <YAxis allowDecimals={false} stroke="#94a3b8" />
+                          <Tooltip content={<LevelRelianceTooltip />} cursor={{ fill: "rgba(255,255,255,.05)" }} />
+                          <Bar dataKey="wins" name="Wins" fill="#34d399" radius={[6, 6, 0, 0]} />
+                          <Bar dataKey="losses" name="Losses" fill="#fb7185" radius={[6, 6, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <div className="mt-4 rounded-lg border border-white/10 bg-slate-950/70 p-4 text-sm font-bold leading-6 text-white/65">
+                      Not enough level-known 1v1 matches to judge whether upgrades are carrying.
+                    </div>
+                  )}
+                  {report.level_analysis.level_reliance_roast && (
+                    <p className="mt-3 text-sm font-black leading-6 text-emerald-50">"{report.level_analysis.level_reliance_roast}"</p>
+                  )}
+                </div>
+              </div>
+              <div className="mt-5 grid gap-3 md:grid-cols-3">
+                {scoreGroupData.map((item) => (
+                  <div key={item.label} className="rounded-lg border border-white/10 bg-white/5 p-3">
+                    <div className="text-[11px] font-black uppercase text-white/45">{item.confidence} confidence</div>
+                    <div className="mt-1 font-black text-white">{item.label}</div>
+                    <div className="mt-2 text-2xl font-black text-rose-300">{item.display}</div>
                   </div>
                 ))}
               </div>
@@ -1127,61 +1250,6 @@ function ReportDashboard({ report: rawReport, onReset }: { report: Report; onRes
           </div>
         </div>
       </section>
-
-      <Section title="Card Evidence Gallery" icon={<Flame size={20} />}>
-        {galleryItems.length ? (
-          <div className="space-y-5">
-            {featuredGallery.length > 0 && (
-              <div className="grid gap-5 lg:grid-cols-2">
-                {featuredGallery.map((item) => <CardEvidenceTile key={item.id} item={item} featured />)}
-              </div>
-            )}
-            {remainingGallery.length > 0 && (
-              <div className="grid gap-4 lg:grid-cols-3">
-                {remainingGallery.map((item) => <CardEvidenceTile key={item.id} item={item} />)}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="rounded-lg border border-white/10 bg-white/5 p-5">
-            <div className="text-xs font-black uppercase text-amber-100">Limited Card Evidence</div>
-            <h2 className="mt-2 text-3xl font-black uppercase text-white">No Card Conviction Yet</h2>
-            <p className="mt-3 text-lg font-semibold leading-8 text-white/75">{report.favourite_card_analysis.favourite_card_reason || report.feared_card_analysis.evidence_summary}</p>
-            <Evidence evidence={[...safeArray<string>(report.favourite_card_analysis.evidence), ...safeArray<string>(report.feared_card_analysis.evidence)]} />
-          </div>
-        )}
-      </Section>
-
-      <Section title="Win Rate Verdict" icon={<Gauge size={20} />}>
-        <WinRateVerdictPanel report={report} />
-      </Section>
-
-      <Section title={report.personality_report.section_title} icon={<Sparkles size={20} />}>
-        <div className="grid gap-5 lg:grid-cols-[1.1fr_.9fr]">
-          <div className="rounded-lg border border-white/10 bg-white/5 p-5">
-            <div className="text-xs font-black uppercase text-white/50">Overall Personality Summary</div>
-            <h2 className="mt-2 text-3xl font-black uppercase text-white">{report.personality_report.title}</h2>
-            <p className="mt-4 text-lg font-semibold leading-8 text-white/80">{report.personality_report.summary}</p>
-            <div className="mt-5 rounded-lg border border-sky-300/20 bg-sky-400/10 p-4">
-              <div className="text-sm font-black uppercase text-sky-100">Final Diagnosis</div>
-              <p className="mt-2 text-xl font-black text-white">{report.personality_report.diagnosis}</p>
-              <p className="mt-3 text-sm font-semibold leading-6 text-sky-50/80">{report.personality_report.scope_note}</p>
-            </div>
-          </div>
-          <div className="space-y-3">
-            {report.personality_report.traits.map((trait) => (
-              <div key={trait.label} className="rounded-lg border border-white/10 bg-slate-950/60 p-4">
-                <div className="text-xs font-black uppercase text-white/50">{trait.label}</div>
-                <div className="mt-2 text-xl font-black text-white">{trait.value}</div>
-              </div>
-            ))}
-            <div className="rounded-lg border border-amber-300/25 bg-amber-300/10 p-4">
-              <div className="text-xs font-black uppercase text-amber-100">Recommended Intervention</div>
-              <p className="mt-2 text-lg font-black leading-7 text-white">{report.personality_report.intervention_tip}</p>
-            </div>
-          </div>
-        </div>
-      </Section>
 
       <Section title="What The Hell Is This Deck?" icon={<BadgeAlert size={20} />}>
         <div className="grid gap-5 lg:grid-cols-[.92fr_1.08fr]">
@@ -1232,149 +1300,28 @@ function ReportDashboard({ report: rawReport, onReset }: { report: Report; onRes
         </div>
       </Section>
 
-      <Section title="Matchup Trauma" icon={<ShieldAlert size={20} />}>
-        <div className="grid gap-5 lg:grid-cols-[.9fr_1.1fr]">
-          <div className="rounded-lg border border-white/10 bg-white/5 p-5">
-            <div className="text-xs font-black uppercase text-rose-200">Who hurt you?</div>
-            <div className="mt-3 flex flex-wrap items-start gap-4">
-              <CardArtwork
-                card={report.feared_card_analysis.feared_card ?? report.feared_card_analysis.leading_candidate}
-                fallbackName={report.feared_card_analysis.feared_card_name ?? report.matchup_analysis.who_hurt_you?.card ?? "No clear suspect"}
-                large
-              />
-              <div className="min-w-0 flex-1">
-                <h3 className="text-4xl font-black uppercase text-white">{report.feared_card_analysis.feared_card_name ?? report.matchup_analysis.who_hurt_you?.card ?? "No clear suspect"}</h3>
-                <p className="mt-3 text-sm font-semibold leading-6 text-white/65">{report.feared_card_analysis.roast ?? report.feared_card_analysis.evidence_summary}</p>
-              </div>
-            </div>
-            {report.matchup_analysis.who_hurt_you && (
-              <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                <Metric label="Faced" value={report.matchup_analysis.who_hurt_you.faced} tone="blue" />
-                <Metric label="Lost" value={report.matchup_analysis.who_hurt_you.losses} tone="red" />
-                <Metric label="Win Rate Against" value={`${report.matchup_analysis.who_hurt_you.win_rate_against}%`} tone="gold" />
-                <Metric label="Confidence" value={report.matchup_analysis.who_hurt_you.confidence} tone="green" />
+      <Section title="Favourite Card And Most Feared Card" icon={<Flame size={20} />}>
+        {galleryItems.length ? (
+          <div className="space-y-5">
+            {featuredGallery.length > 0 && (
+              <div className="grid gap-5 lg:grid-cols-2">
+                {featuredGallery.map((item) => <CardEvidenceTile key={item.id} item={item} featured />)}
               </div>
             )}
-            <div className="mt-6 border-t border-white/10 pt-5">
-              <div className="text-xs font-black uppercase text-sky-200">Natural Predator</div>
-              <div className="mt-2 text-2xl font-black uppercase text-white">{report.matchup_analysis.natural_predator.label}</div>
-              <p className="mt-2 text-sm font-semibold leading-6 text-white/60">Lost {report.matchup_analysis.natural_predator.losses} of {report.matchup_analysis.natural_predator.matches} recent battles against this detected card core.</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {report.matchup_analysis.natural_predator.core_cards.map((card) => <CardToken key={card} card={card} />)}
+            {remainingGallery.length > 0 && (
+              <div className="grid gap-4 lg:grid-cols-3">
+                {remainingGallery.map((item) => <CardEvidenceTile key={item.id} item={item} />)}
               </div>
-            </div>
+            )}
           </div>
+        ) : (
           <div className="rounded-lg border border-white/10 bg-white/5 p-5">
-            <h3 className="text-lg font-black uppercase text-white">Opponent cards appearing in losses</h3>
-            <p className="mt-1 text-sm font-semibold text-white/55">Shows which opponent cards appear most often in losses, with sample-size confidence kept visible.</p>
-            <div className="mt-4 h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={traumaData} layout="vertical" margin={{ left: 18, right: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.08)" />
-                  <XAxis type="number" stroke="#94a3b8" />
-                  <YAxis dataKey="card" type="category" width={120} stroke="#94a3b8" tick={{ fontSize: 11 }} />
-                  <Tooltip />
-                  <Bar dataKey="lossRate" name="Loss rate %" fill="#fb7185" radius={[0, 6, 6, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            <div className="text-xs font-black uppercase text-amber-100">Limited Card Evidence</div>
+            <h2 className="mt-2 text-3xl font-black uppercase text-white">No Card Conviction Yet</h2>
+            <p className="mt-3 text-lg font-semibold leading-8 text-white/75">{report.favourite_card_analysis.favourite_card_reason || report.feared_card_analysis.evidence_summary}</p>
+            <Evidence evidence={[...safeArray<string>(report.favourite_card_analysis.evidence), ...safeArray<string>(report.feared_card_analysis.evidence)]} />
           </div>
-        </div>
-      </Section>
-
-      <Section title="Behaviour Patterns" icon={<Zap size={20} />}>
-        <div className="grid gap-5 lg:grid-cols-[1.1fr_.9fr]">
-          <div className="rounded-lg border border-white/10 bg-white/5 p-5">
-            <h3 className="text-2xl font-black uppercase text-white">{report.behaviour_analysis.title}</h3>
-            <p className="mt-2 text-sm font-semibold leading-6 text-white/60">Deck-change behaviour compares eligible personal-deck matches in chronological order. A panic-switch verdict requires at least three major deck changes after valid losses.</p>
-            <div className="mt-5 grid gap-3 sm:grid-cols-4">
-              <Metric label="Unique Decks" value={report.behaviour_analysis.unique_decks} tone="blue" />
-              <Metric label="Post-Loss Changes" value={`${report.behaviour_analysis.changes_after_losses}/${report.behaviour_analysis.post_loss_opportunities ?? 0}`} tone="red" />
-              <Metric label="Main Deck WR" value={`${report.behaviour_analysis.main_deck_win_rate}%`} tone="gold" />
-              <Metric label="Core Similarity" value={`${report.behaviour_analysis.core_deck_similarity_score}%`} tone="green" />
-            </div>
-            <Evidence evidence={report.behaviour_analysis.evidence} />
-          </div>
-          <div className="rounded-lg border border-white/10 bg-white/5 p-5">
-            <div className="text-xs font-black uppercase text-white/50">Overlevelled Fraud Score</div>
-            <div className="mt-2 text-6xl font-black text-rose-300">{report.level_analysis.overlevelled_fraud_score}%</div>
-            <div className="mt-2 text-lg font-black uppercase text-white">{report.level_analysis.tier}</div>
-            <p className="mt-3 text-sm font-semibold leading-6 text-white/60">Counts only eligible level-known losses where your average card level was at least 0.75 above the opponent's. It is a joke metric, not proof that you are actually bad.</p>
-            <p className="mt-3 text-sm font-semibold leading-6 text-white/55">
-              {report.level_analysis.meaningful_level_advantage_losses ?? 0} meaningful advantage losses from {report.level_analysis.total_losses_with_levels ?? 0} eligible level-known losses.
-            </p>
-            <div className="mt-5 h-4 overflow-hidden rounded-full bg-white/10">
-              <div className="h-full bg-rose-400" style={{ width: `${report.level_analysis.overlevelled_fraud_score}%` }} />
-            </div>
-          </div>
-        </div>
-      </Section>
-
-      <Section title="Selected Roast Modules" icon={<Crosshair size={20} />}>
-        <RoastModuleList modules={report.roast_modules} />
-      </Section>
-
-      <Section title="Supporting Evidence" icon={<Swords size={20} />}>
-        <div className="grid gap-5 lg:grid-cols-3">
-          <div className="rounded-lg border border-white/10 bg-white/5 p-5">
-            <h3 className="text-lg font-black uppercase text-white">Fraud Score Contributors</h3>
-            <p className="mt-1 text-sm font-semibold text-white/55">Shows which rule-based factors added the most to the total Fraud Score.</p>
-            <div className="mt-4 h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={contributorData} layout="vertical" margin={{ left: 18, right: 20 }}>
-                  <XAxis type="number" stroke="#94a3b8" />
-                  <YAxis dataKey="label" type="category" width={122} stroke="#94a3b8" tick={{ fontSize: 10 }} />
-                  <Tooltip />
-                  <Bar dataKey="points" fill="#facc15" radius={[0, 6, 6, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-          <div className="rounded-lg border border-white/10 bg-white/5 p-5">
-            <h3 className="text-lg font-black uppercase text-white">Loss Type Breakdown</h3>
-            <p className="mt-1 text-sm font-semibold text-white/55">Shows whether level disadvantage explains losses, or whether the cards did their part and the result still went sideways.</p>
-            <div className="mt-4 h-52">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={levelData} layout="vertical">
-                  <XAxis type="number" stroke="#94a3b8" />
-                  <YAxis type="category" dataKey="name" width={70} stroke="#94a3b8" />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="Underlevelled" stackId="a" fill="#60a5fa" />
-                  <Bar dataKey="Even level" stackId="a" fill="#facc15" />
-                  <Bar dataKey="Overlevelled" stackId="a" fill="#fb7185" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-          <div className="rounded-lg border border-white/10 bg-white/5 p-5">
-            <h3 className="text-lg font-black uppercase text-white">Most-Used Cards</h3>
-            <p className="mt-1 text-sm font-semibold text-white/55">Shows which cards appear most in recent player decks and whether they are returning value.</p>
-            <div className="mt-4 h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={usedData} layout="vertical" margin={{ left: 18, right: 20 }}>
-                  <XAxis type="number" stroke="#94a3b8" />
-                  <YAxis dataKey="card" type="category" width={100} stroke="#94a3b8" tick={{ fontSize: 10 }} />
-                  <Tooltip />
-                  <Bar dataKey="used" fill="#38bdf8" radius={[0, 6, 6, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </div>
-        <div className="mt-5 rounded-lg border border-white/10 bg-white/5 p-5">
-          <h3 className="text-lg font-black uppercase text-white">Recent Match Trend</h3>
-          <p className="mt-1 text-sm font-semibold text-white/55">Win is +1, draw is 0, loss is -1. This keeps the trend readable without pretending to know replay details.</p>
-          <div className="mt-4 grid gap-2 sm:grid-cols-6 lg:grid-cols-12">
-            {trendData.map((battle) => (
-              <div key={battle.match} className={`rounded-lg border p-3 text-center ${battle.result > 0 ? "border-emerald-300/25 bg-emerald-300/10" : battle.result < 0 ? "border-rose-300/25 bg-rose-400/10" : "border-sky-300/25 bg-sky-400/10"}`}>
-                <div className="text-xs font-black uppercase text-white/50">#{battle.match}</div>
-                <div className="mt-1 text-sm font-black text-white">{battle.result > 0 ? "Win" : battle.result < 0 ? "Loss" : "Draw"}</div>
-                <div className="mt-1 text-xs font-semibold text-white/55">{battle.crowns}</div>
-              </div>
-            ))}
-          </div>
-        </div>
+        )}
       </Section>
 
       <Section title="Final Verdict" icon={<Trophy size={20} />}>

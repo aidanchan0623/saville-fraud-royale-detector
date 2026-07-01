@@ -149,10 +149,23 @@ export interface Report {
   };
   level_analysis: {
     loss_counts: { underlevelled: number; even: number; overlevelled: number };
+    win_counts?: { underlevelled: number; even: number; overlevelled: number };
+    draw_counts?: { underlevelled: number; even: number; overlevelled: number };
+    result_counts?: Record<string, { wins: number; losses: number; draws: number }>;
     total_losses_with_levels?: number;
     eligible_level_matches?: number;
+    level_known_sample_size?: number;
     meaningful_level_advantage_losses?: number;
+    meaningful_level_advantage_wins?: number;
     average_level_difference?: number;
+    average_level_difference_in_wins?: number;
+    average_level_difference_in_losses?: number;
+    overlevelled_win_rate?: number;
+    even_level_win_rate?: number;
+    underlevelled_win_rate?: number;
+    level_reliance_chart?: Array<{ key: string; label: string; wins: number; losses: number; draws: number; matches: number; win_rate: number; average_level_difference: number }>;
+    level_chart_visible?: boolean;
+    level_reliance_roast?: string;
     confidence?: Confidence;
     evidence?: string[];
     percentages: { matchmaking_conspiracy: number; fair_fight_failure: number; certified_skill_issue: number };
@@ -265,9 +278,12 @@ export interface Report {
     headline_roast: string;
     confidence: Confidence;
     overall_confidence_note?: string;
-    contributors: Array<{ label: string; group?: string; raw_candidate_points?: number; applied_points?: number; points: number; description: string; evidence: string[]; evidence_count: number; sample_size?: number; confidence?: Confidence; excluded?: boolean; roast: string }>;
+    contributors: Array<{ key?: string; label: string; display_label?: string; group?: string; raw_score?: number; raw_candidate_points?: number; applied_points?: number; points: number; score?: number; max_score?: number; max_points?: number; description: string; evidence: string[]; evidence_count: number; sample_size?: number; confidence?: Confidence; excluded?: boolean; roast: string; matched_cards?: string[]; matched_combinations?: string[]; categories?: string[]; band?: string }>;
+    score_groups?: Array<{ key?: string; label: string; display_label?: string; group?: string; raw_score?: number; raw_candidate_points?: number; applied_points?: number; points: number; score?: number; max_score?: number; max_points?: number; description: string; evidence: string[]; evidence_count: number; sample_size?: number; confidence?: Confidence; excluded?: boolean; roast: string; matched_cards?: string[]; matched_combinations?: string[]; categories?: string[]; band?: string }>;
     score_receipts: string[];
     group_caps?: Record<string, number>;
+    score_formula?: Record<string, string>;
+    score_summary?: string;
   };
   personality_report: {
     section_title: string;

@@ -56,5 +56,8 @@
   {"name":"Skeleton Barrel","elixir":3,"type":"troop","rarity":"common","traits":["win_condition","air","bait","swarm"]},
   {"name":"Witch","elixir":5,"type":"troop","rarity":"epic","traits":["splash","anti_air","ranged","spawner"]},
   {"name":"Inferno Dragon","elixir":4,"type":"troop","rarity":"legendary","traits":["air","anti_air","tank_killer"]},
-  {"name":"Fisherman","elixir":3,"type":"troop","rarity":"legendary","traits":["control","ground","pull"]}
+  {"name":"Fisherman","elixir":3,"type":"troop","rarity":"legendary","traits":["control","ground","pull"]},
+  {"name":"Royal Recruits","elixir":7,"type":"troop","rarity":"common","traits":["ground","swarm","defense","split_lane"]},
+  {"name":"Electro Giant","elixir":7,"type":"troop","rarity":"epic","traits":["win_condition","tank","building_target","stun"]},
+  {"name":"P.E.K.K.A","elixir":7,"type":"troop","rarity":"epic","traits":["tank_killer","ground","heavy_damage"]}
 ]
