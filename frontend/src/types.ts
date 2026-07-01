@@ -41,16 +41,25 @@ export interface Report {
     close_wins: number;
     close_losses: number;
     current_streak: { type: string; count: number };
-    timeline: Array<{ battleTime: string; result: string; playerCrowns: number; opponentCrowns: number; deck: string[] }>;
+    timeline: Array<{ battleTime: string; result: string; playerCrowns: number; opponentCrowns: number; deck: string[]; eligible?: boolean }>;
+    eligible_battles?: number;
+    excluded_battles?: number;
   };
   deck_analysis: {
     current_deck: Card[];
+    current_deck_key?: string[];
     average_elixir: number;
-    composition: { troops: number; spells: number; buildings: number };
+    composition: { troops: number; spells: number; buildings: number; unknown?: number };
     most_used_cards: Array<{ card: string; used: number; wins: number; losses: number; win_rate: number }>;
     most_common_deck: { cards: string[]; uses: number };
+    recent_main_deck?: { cards: string[]; uses: number; key?: string[] };
+    current_matches_recent_main_deck?: boolean;
+    eligible_battle_history?: { eligible_matches: number; excluded_matches: number; note: string };
     estimated_deck_style: string;
     deck_identity_score: number;
+    structural_issues?: Array<{ label: string; explanation: string }>;
+    structural_issue_count?: number;
+    metadata_unknown_count?: number;
     emotional_support_card: Record<string, any>;
     main_character: Record<string, any>;
   };
@@ -62,32 +71,48 @@ export interface Report {
     traits: Array<{ label: string; explanation: string }>;
     evidence: string[];
     confidence: Confidence;
+    current_matches_recent_main_deck?: boolean;
   };
   matchup_analysis: {
-    traumatic_cards: Array<{ card: string; faced: number; losses: number; wins: number; win_rate_against: number; loss_rate: number; confidence: Confidence }>;
-    who_hurt_you: { card: string; faced: number; losses: number; win_rate_against: number; confidence: Confidence } | null;
+    traumatic_cards: Array<{ card: string; faced: number; losses: number; wins: number; win_rate_against: number; loss_rate: number; baseline_loss_rate?: number; excess_loss_rate?: number; confidence: Confidence; evidence?: string[] }>;
+    who_hurt_you: { card: string; faced: number; losses: number; win_rate_against: number; loss_rate?: number; baseline_loss_rate?: number; excess_loss_rate?: number; confidence: Confidence; evidence?: string[] } | null;
     one_match_trauma: Record<string, any> | null;
     complaint_without_proof: Record<string, any> | null;
-    natural_predator: { label: string; core_cards: string[]; losses: number; matches: number; confidence: Confidence };
+    natural_predator: { label: string; core_cards: string[]; losses: number; matches: number; loss_rate?: number; baseline_loss_rate?: number; excess_loss_rate?: number; confidence: Confidence; evidence?: string[] };
+    baseline_loss_rate?: number;
+    confidence?: Confidence;
   };
   level_analysis: {
     loss_counts: { underlevelled: number; even: number; overlevelled: number };
+    total_losses_with_levels?: number;
+    eligible_level_matches?: number;
+    meaningful_level_advantage_losses?: number;
+    average_level_difference?: number;
+    confidence?: Confidence;
+    evidence?: string[];
     percentages: { matchmaking_conspiracy: number; fair_fight_failure: number; certified_skill_issue: number };
     overlevelled_fraud_score: number;
     tier: string;
   };
   behaviour_analysis: {
     title: string;
+    classification?: string;
+    eligible_battles?: number;
+    excluded_battles?: number;
     unique_decks: number;
+    materially_distinct_deck_cores?: number;
+    same_core_percentage?: number;
     exact_same_deck_percentage: number;
     core_deck_similarity_score: number;
     major_deck_changes: number;
+    post_loss_opportunities?: number;
     changes_after_losses: number;
     main_deck: string[];
     main_deck_games: number;
     main_deck_win_rate: number;
     emergency_deck_games: number;
     emergency_deck_win_rate: number;
+    confidence?: Confidence;
     evidence: string[];
   };
   clutch_analysis: {
@@ -105,8 +130,10 @@ export interface Report {
     tier_description: string;
     headline_roast: string;
     confidence: Confidence;
-    contributors: Array<{ label: string; points: number; description: string; evidence: string[]; evidence_count: number; roast: string }>;
+    overall_confidence_note?: string;
+    contributors: Array<{ label: string; group?: string; raw_candidate_points?: number; applied_points?: number; points: number; description: string; evidence: string[]; evidence_count: number; sample_size?: number; confidence?: Confidence; excluded?: boolean; roast: string }>;
     score_receipts: string[];
+    group_caps?: Record<string, number>;
   };
   personality_report: {
     section_title: string;

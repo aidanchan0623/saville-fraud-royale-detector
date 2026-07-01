@@ -71,6 +71,14 @@ DECK_STYLE_COPY = {
             "The strategy exists somewhere between intention and noise.",
         ],
     },
+    "Unclassified deck style": {
+        "plain": "The current deck does not cleanly match a known archetype from the local rules. That is not automatically a weakness.",
+        "roasts": [
+            "Unclassified is not guilty. The court has learned restraint.",
+            "The deck escaped the label machine, but no one is going to jail for that alone.",
+            "The archetype drawer did not fit, so the dashboard is keeping its accusations modest.",
+        ],
+    },
 }
 
 TRAIT_EXPLANATIONS = {
@@ -87,5 +95,7 @@ TRAIT_EXPLANATIONS = {
     "No spells": "The deck has no spell safety valve for small troops or finish damage.",
     "No buildings": "The deck lacks a stationary defensive anchor.",
     "All-in troop collection": "The deck leans heavily on troops and may lack flexible utility.",
+    "Incomplete card metadata": "Some card-role metadata is missing locally, so structural claims are intentionally limited.",
+    "No clear win condition": "The known cards do not include a reliable tower-damage plan.",
+    "Readable role coverage": "Known card roles show no severe structural issue.",
 }
-

@@ -22,10 +22,16 @@ function assertReportPayload(payload: unknown): Report {
   const requiredObjects = ["player_summary", "battle_summary", "deck_analysis", "fraud_score", "personality_report", "deck_personality", "roast_report"];
   const missing = requiredObjects.filter((key) => !isRecord(payload[key]));
   if (missing.length) {
+    if (import.meta.env.DEV) {
+      console.warn("Malformed report payload missing top-level sections", { missing, payload });
+    }
     throw new Error(`Backend returned an outdated report payload missing: ${missing.join(", ")}. Restart the backend or refresh the report.`);
   }
 
   if (!Array.isArray(payload.roasts)) {
+    if (import.meta.env.DEV) {
+      console.warn("Malformed report payload missing roasts array", payload);
+    }
     throw new Error("Backend returned an invalid report payload missing roasts.");
   }
 

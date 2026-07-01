@@ -25,13 +25,14 @@ class CardDataService:
     def get(self, name: str) -> dict[str, Any]:
         found = self.by_name.get(name) or self.by_key.get(_key(name))
         if found:
-            return found
+            return {**found, "metadata_complete": True}
         return {
             "name": name,
-            "elixir": 4,
-            "type": "troop",
+            "elixir": None,
+            "type": "unknown",
             "rarity": "common",
             "traits": [],
+            "metadata_complete": False,
         }
 
     def hydrate_deck(self, names: list[str], level: int = 13) -> list[dict[str, Any]]:
@@ -43,10 +44,11 @@ class CardDataService:
                     "name": card["name"],
                     "level": level,
                     "maxLevel": 14,
-                    "elixir": card["elixir"],
+                    "elixir": card.get("elixir") or 4,
                     "type": card["type"],
                     "rarity": card["rarity"],
                     "traits": card.get("traits", []),
+                    "metadata_complete": card.get("metadata_complete", True),
                 }
             )
         return deck
@@ -55,4 +57,3 @@ class CardDataService:
 @lru_cache
 def get_card_service() -> CardDataService:
     return CardDataService()
-

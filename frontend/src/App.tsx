@@ -1,4 +1,4 @@
-import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
+import { Component, type ErrorInfo, type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
   BadgeAlert,
@@ -27,6 +27,14 @@ import {
 } from "recharts";
 import { getDemoVictims, getReport } from "./lib/api";
 import type { Card, DemoVictim, Report, Roast } from "./types";
+
+function safeArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 function initials(name: string) {
   return name
@@ -333,7 +341,275 @@ function Landing({
   );
 }
 
-function ReportDashboard({ report, onReset }: { report: Report; onReset: () => void }) {
+const DEFAULT_REPORT: Report = {
+  schema_version: "frontend-fallback",
+  player_summary: {
+    name: "Unknown Player",
+    tag: "Unknown Tag",
+    arena: "Unknown Arena",
+    trophies: 0,
+    player_level: 0,
+    clan: "No clan",
+    battles_analysed: 0,
+  },
+  battle_summary: {
+    battles_analysed: 0,
+    wins: 0,
+    losses: 0,
+    draws: 0,
+    win_rate: 0,
+    three_crown_wins: 0,
+    three_crown_losses: 0,
+    close_wins: 0,
+    close_losses: 0,
+    current_streak: { type: "none", count: 0 },
+    timeline: [],
+  },
+  deck_analysis: {
+    current_deck: [],
+    average_elixir: 0,
+    composition: { troops: 0, spells: 0, buildings: 0 },
+    most_used_cards: [],
+    most_common_deck: { cards: [], uses: 0 },
+    estimated_deck_style: "Unclassified deck style",
+    deck_identity_score: 0,
+    emotional_support_card: {},
+    main_character: {},
+  },
+  deck_personality: {
+    title: "Deck Evidence Limited",
+    style: "Unclassified deck style",
+    plain_explanation: "The backend did not provide enough current-deck detail for a confident deck diagnosis.",
+    roast: "The court cannot confirm a deck incident from missing paperwork.",
+    traits: [],
+    evidence: ["Deck diagnosis unavailable or incomplete."],
+    confidence: "low",
+  },
+  matchup_analysis: {
+    traumatic_cards: [],
+    who_hurt_you: null,
+    one_match_trauma: null,
+    complaint_without_proof: null,
+    natural_predator: { label: "No recurring opponent core with enough evidence", core_cards: [], losses: 0, matches: 0, confidence: "low" },
+  },
+  level_analysis: {
+    loss_counts: { underlevelled: 0, even: 0, overlevelled: 0 },
+    percentages: { matchmaking_conspiracy: 0, fair_fight_failure: 0, certified_skill_issue: 0 },
+    overlevelled_fraud_score: 0,
+    tier: "Insufficient level evidence",
+  },
+  behaviour_analysis: {
+    title: "LIMITED DATA",
+    unique_decks: 0,
+    exact_same_deck_percentage: 0,
+    core_deck_similarity_score: 0,
+    major_deck_changes: 0,
+    changes_after_losses: 0,
+    main_deck: [],
+    main_deck_games: 0,
+    main_deck_win_rate: 0,
+    emergency_deck_games: 0,
+    emergency_deck_win_rate: 0,
+    evidence: ["Behaviour analysis unavailable or incomplete."],
+  },
+  clutch_analysis: {
+    rating: "Insufficient close-game evidence",
+    close_wins: 0,
+    close_losses: 0,
+    three_crown_losses: 0,
+    three_crown_wins: 0,
+  },
+  divorce_recommendation: {},
+  fraud_score: {
+    score: 0,
+    tier: "Evidence Insufficient",
+    tier_key: "respectable",
+    tier_description: "The report payload did not include enough evidence for a score.",
+    headline_roast: "Suspicion noted; conviction denied due to incomplete data.",
+    confidence: "low",
+    contributors: [],
+    score_receipts: ["Fraud Score unavailable or incomplete."],
+  },
+  personality_report: {
+    section_title: "Evidence-Based Personality Report",
+    title: "Insufficient Evidence",
+    summary: "The backend did not provide enough verified report fields for a personality verdict.",
+    traits: [],
+    diagnosis: "No verdict issued.",
+    intervention_tip: "Return to search and try again after the backend refreshes.",
+    evidence: ["Personality report unavailable or incomplete."],
+    confidence: "low",
+    scope_note: "This is a deck personality summary based only on eligible recent battle-log behaviour, not a real psychological diagnosis.",
+  },
+  roast_report: {
+    title: "Insufficient Evidence",
+    troll_score: 0,
+    score_label: "Evidence Insufficient",
+    headline_roast: "The court cannot confirm a deck incident.",
+    evidence: [],
+    score_breakdown: [],
+  },
+  roasts: [],
+  disclaimer: "Some report fields were missing, so this fallback preserved the page instead of rendering a blank screen.",
+};
+
+function normalizeRoast(roast: unknown): Roast {
+  const item = isRecord(roast) ? roast : {};
+  return {
+    rule_id: String(item.rule_id ?? "UNKNOWN_ROAST"),
+    title: String(item.title ?? "Evidence Note"),
+    text: String(item.text ?? "No roast text was provided."),
+    funny_description: typeof item.funny_description === "string" ? item.funny_description : undefined,
+    plain_language_explanation: typeof item.plain_language_explanation === "string" ? item.plain_language_explanation : undefined,
+    evidence: safeArray<string>(item.evidence),
+    confidence: item.confidence === "high" || item.confidence === "medium" ? item.confidence : "low",
+    relevant_cards: safeArray<string>(item.relevant_cards),
+    metrics: isRecord(item.metrics) ? item.metrics : {},
+  };
+}
+
+function withReportDefaults(rawReport: unknown): Report {
+  const raw = isRecord(rawReport) ? rawReport : {};
+  const player = isRecord(raw.player_summary) ? raw.player_summary : {};
+  const battle = isRecord(raw.battle_summary) ? raw.battle_summary : {};
+  const deck = isRecord(raw.deck_analysis) ? raw.deck_analysis : {};
+  const composition = isRecord(deck.composition) ? deck.composition : {};
+  const deckPersonality = isRecord(raw.deck_personality) ? raw.deck_personality : {};
+  const matchup = isRecord(raw.matchup_analysis) ? raw.matchup_analysis : {};
+  const predator = isRecord(matchup.natural_predator) ? matchup.natural_predator : {};
+  const level = isRecord(raw.level_analysis) ? raw.level_analysis : {};
+  const lossCounts = isRecord(level.loss_counts) ? level.loss_counts : {};
+  const percentages = isRecord(level.percentages) ? level.percentages : {};
+  const behaviour = isRecord(raw.behaviour_analysis) ? raw.behaviour_analysis : {};
+  const clutch = isRecord(raw.clutch_analysis) ? raw.clutch_analysis : {};
+  const fraud = isRecord(raw.fraud_score) ? raw.fraud_score : {};
+  const personality = isRecord(raw.personality_report) ? raw.personality_report : {};
+  const roastReport = isRecord(raw.roast_report) ? raw.roast_report : {};
+
+  const normalized: Report = {
+    ...DEFAULT_REPORT,
+    schema_version: String(raw.schema_version ?? DEFAULT_REPORT.schema_version),
+    player_summary: { ...DEFAULT_REPORT.player_summary, ...player },
+    battle_summary: {
+      ...DEFAULT_REPORT.battle_summary,
+      ...battle,
+      current_streak: isRecord(battle.current_streak) ? { ...DEFAULT_REPORT.battle_summary.current_streak, ...battle.current_streak } : DEFAULT_REPORT.battle_summary.current_streak,
+      timeline: safeArray<Report["battle_summary"]["timeline"][number]>(battle.timeline),
+    },
+    deck_analysis: {
+      ...DEFAULT_REPORT.deck_analysis,
+      ...deck,
+      current_deck: safeArray<Card>(deck.current_deck),
+      composition: { ...DEFAULT_REPORT.deck_analysis.composition, ...composition },
+      most_used_cards: safeArray<Report["deck_analysis"]["most_used_cards"][number]>(deck.most_used_cards),
+      most_common_deck: isRecord(deck.most_common_deck) ? { ...DEFAULT_REPORT.deck_analysis.most_common_deck, ...deck.most_common_deck, cards: safeArray<string>(deck.most_common_deck.cards) } : DEFAULT_REPORT.deck_analysis.most_common_deck,
+      emotional_support_card: isRecord(deck.emotional_support_card) ? deck.emotional_support_card : {},
+      main_character: isRecord(deck.main_character) ? deck.main_character : {},
+    },
+    deck_personality: {
+      ...DEFAULT_REPORT.deck_personality,
+      ...deckPersonality,
+      traits: safeArray<Report["deck_personality"]["traits"][number]>(deckPersonality.traits),
+      evidence: safeArray<string>(deckPersonality.evidence),
+    },
+    matchup_analysis: {
+      ...DEFAULT_REPORT.matchup_analysis,
+      ...matchup,
+      traumatic_cards: safeArray<Report["matchup_analysis"]["traumatic_cards"][number]>(matchup.traumatic_cards),
+      who_hurt_you: isRecord(matchup.who_hurt_you) ? matchup.who_hurt_you as Report["matchup_analysis"]["who_hurt_you"] : null,
+      one_match_trauma: isRecord(matchup.one_match_trauma) ? matchup.one_match_trauma : null,
+      complaint_without_proof: isRecord(matchup.complaint_without_proof) ? matchup.complaint_without_proof : null,
+      natural_predator: { ...DEFAULT_REPORT.matchup_analysis.natural_predator, ...predator, core_cards: safeArray<string>(predator.core_cards) },
+    },
+    level_analysis: {
+      ...DEFAULT_REPORT.level_analysis,
+      ...level,
+      loss_counts: { ...DEFAULT_REPORT.level_analysis.loss_counts, ...lossCounts },
+      percentages: { ...DEFAULT_REPORT.level_analysis.percentages, ...percentages },
+    },
+    behaviour_analysis: {
+      ...DEFAULT_REPORT.behaviour_analysis,
+      ...behaviour,
+      main_deck: safeArray<string>(behaviour.main_deck),
+      evidence: safeArray<string>(behaviour.evidence),
+    },
+    clutch_analysis: { ...DEFAULT_REPORT.clutch_analysis, ...clutch },
+    divorce_recommendation: isRecord(raw.divorce_recommendation) ? raw.divorce_recommendation : {},
+    fraud_score: {
+      ...DEFAULT_REPORT.fraud_score,
+      ...fraud,
+      contributors: safeArray<Report["fraud_score"]["contributors"][number]>(fraud.contributors),
+      score_receipts: safeArray<string>(fraud.score_receipts),
+    },
+    personality_report: {
+      ...DEFAULT_REPORT.personality_report,
+      ...personality,
+      traits: safeArray<Report["personality_report"]["traits"][number]>(personality.traits),
+      evidence: safeArray<string>(personality.evidence),
+    },
+    roast_report: {
+      ...DEFAULT_REPORT.roast_report,
+      ...roastReport,
+      evidence: safeArray<string>(roastReport.evidence),
+      score_breakdown: safeArray<Report["roast_report"]["score_breakdown"][number]>(roastReport.score_breakdown),
+    },
+    roasts: safeArray<unknown>(raw.roasts).map(normalizeRoast),
+    disclaimer: String(raw.disclaimer ?? DEFAULT_REPORT.disclaimer),
+  };
+
+  if (import.meta.env.DEV && raw !== rawReport) {
+    console.warn("Malformed report payload normalized before render.", rawReport);
+  }
+
+  return normalized;
+}
+
+function ErrorFallback({ error, onReset, onRetry }: { error: Error | null; onReset: () => void; onRetry: () => void }) {
+  return (
+    <main className="min-h-screen bg-slate-950 px-4 py-10 text-white">
+      <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-3xl items-center">
+        <div className="w-full rounded-lg border border-rose-300/35 bg-slate-950/85 p-6 shadow-2xl">
+          <div className="text-xs font-black uppercase text-rose-200">Report Render Guard</div>
+          <h1 className="mt-2 text-4xl font-black uppercase text-white">The report tried to vanish.</h1>
+          <p className="mt-4 text-sm font-semibold leading-6 text-white/70">
+            A malformed or incomplete report field hit the dashboard. The page stayed alive, because blank screens are not evidence-based.
+          </p>
+          {import.meta.env.DEV && error && (
+            <pre className="mt-4 max-h-40 overflow-auto rounded-lg border border-white/10 bg-black/30 p-3 text-xs text-rose-100">{error.message}</pre>
+          )}
+          <div className="mt-5 flex flex-wrap gap-3">
+            <Button onClick={onReset} variant="danger"><RotateCcw size={17} /> Return to Search</Button>
+            <Button onClick={onRetry} variant="ghost">Try Again</Button>
+          </div>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+class ReportErrorBoundary extends Component<{ children: ReactNode; onReset: () => void }, { error: Error | null }> {
+  state = { error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    if (import.meta.env.DEV) {
+      console.error("Report render failed", error, info);
+    }
+  }
+
+  render() {
+    if (this.state.error) {
+      return <ErrorFallback error={this.state.error} onReset={this.props.onReset} onRetry={() => this.setState({ error: null })} />;
+    }
+    return this.props.children;
+  }
+}
+
+function ReportDashboard({ report: rawReport, onReset }: { report: Report; onReset: () => void }) {
+  const report = withReportDefaults(rawReport);
   const traumaData = report.matchup_analysis.traumatic_cards.slice(0, 6).map((item) => ({
     card: item.card,
     lossRate: item.loss_rate,
@@ -346,7 +622,7 @@ function ReportDashboard({ report, onReset }: { report: Report; onReset: () => v
   }));
   const contributorData = report.fraud_score.contributors.map((item) => ({
     label: item.label,
-    points: item.points,
+    points: item.applied_points ?? item.points,
   }));
   const levelData = [
     {
@@ -361,6 +637,16 @@ function ReportDashboard({ report, onReset }: { report: Report; onReset: () => v
     result: battle.result === "win" ? 1 : battle.result === "loss" ? -1 : 0,
     crowns: `${battle.playerCrowns}-${battle.opponentCrowns}`,
   }));
+  const recentMainDeck = report.deck_analysis.recent_main_deck ?? {
+    cards: report.deck_analysis.most_common_deck.cards,
+    uses: report.deck_analysis.most_common_deck.uses,
+  };
+  const eligibleHistory = report.deck_analysis.eligible_battle_history ?? {
+    eligible_matches: report.battle_summary.eligible_battles ?? report.battle_summary.battles_analysed,
+    excluded_matches: report.battle_summary.excluded_battles ?? 0,
+    note: "Only eligible personal-deck battles drive behavioural claims.",
+  };
+  const currentMatchesRecent = report.deck_analysis.current_matches_recent_main_deck ?? true;
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
@@ -416,8 +702,16 @@ function ReportDashboard({ report, onReset }: { report: Report; onReset: () => v
                 {report.fraud_score.contributors.slice(0, 5).map((item) => (
                   <div key={item.label} className="rounded-lg border border-white/10 bg-white/5 p-3">
                     <div className="flex items-center justify-between gap-4">
-                      <div className="font-black text-white">{item.label}</div>
-                      <div className="text-lg font-black text-rose-300">+{item.points}</div>
+                      <div>
+                        <div className="font-black text-white">{item.label}</div>
+                        <div className="mt-1 text-[11px] font-black uppercase text-white/45">{item.group ?? "evidence"} - {item.confidence ?? "low"} confidence</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-lg font-black text-rose-300">+{item.applied_points ?? item.points}</div>
+                        {item.raw_candidate_points !== undefined && item.raw_candidate_points !== (item.applied_points ?? item.points) && (
+                          <div className="text-[11px] font-bold text-white/45">raw +{item.raw_candidate_points}</div>
+                        )}
+                      </div>
                     </div>
                     <p className="mt-1 text-sm font-semibold leading-6 text-white/60">{item.description}</p>
                   </div>
@@ -461,13 +755,18 @@ function ReportDashboard({ report, onReset }: { report: Report; onReset: () => v
         </div>
       </Section>
 
-      <Section title="Deck Personality" icon={<BadgeAlert size={20} />}>
+      <Section title="Deck Evidence" icon={<BadgeAlert size={20} />}>
         <div className="grid gap-5 lg:grid-cols-[.92fr_1.08fr]">
           <div className="rounded-lg border border-white/10 bg-white/5 p-5">
-            <div className="text-xs font-black uppercase text-white/50">Deck Style Estimate</div>
+            <div className="text-xs font-black uppercase text-white/50">Current Deck Diagnosis</div>
             <h2 className="mt-2 text-4xl font-black uppercase text-white">{report.deck_personality.title}</h2>
             <p className="mt-4 text-base font-semibold leading-7 text-white/70">{report.deck_personality.plain_explanation}</p>
             <p className="mt-4 rounded-lg border border-rose-300/20 bg-rose-400/10 p-4 text-lg font-black leading-7 text-rose-50">"{report.deck_personality.roast}"</p>
+            {!currentMatchesRecent && (
+              <p className="mt-4 rounded-lg border border-sky-300/25 bg-sky-400/10 p-3 text-sm font-bold leading-6 text-sky-50">
+                Current deck differs from the recent main deck. Historical results may reflect a previous deck.
+              </p>
+            )}
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               {report.deck_personality.traits.map((trait) => (
                 <div key={trait.label} className="rounded-lg border border-white/10 bg-slate-950/60 p-3">
@@ -479,14 +778,29 @@ function ReportDashboard({ report, onReset }: { report: Report; onReset: () => v
             <Evidence evidence={report.deck_personality.evidence} />
           </div>
           <div className="rounded-lg border border-white/10 bg-white/5 p-5">
+            <div className="text-xs font-black uppercase text-white/50">Eligible Battle History</div>
             <div className="grid gap-3 sm:grid-cols-4">
               <Metric label="Avg Elixir" value={report.deck_analysis.average_elixir} tone="gold" />
-              <Metric label="Troops" value={report.deck_analysis.composition.troops} tone="blue" />
-              <Metric label="Spells" value={report.deck_analysis.composition.spells} tone="red" />
-              <Metric label="Buildings" value={report.deck_analysis.composition.buildings} tone="green" />
+              <Metric label="Eligible" value={eligibleHistory.eligible_matches} tone="blue" />
+              <Metric label="Excluded" value={eligibleHistory.excluded_matches} tone="red" />
+              <Metric label="Main Uses" value={recentMainDeck.uses} tone="green" />
             </div>
+            <p className="mt-3 text-sm font-semibold leading-6 text-white/55">{eligibleHistory.note}</p>
+            <div className="mt-5 text-xs font-black uppercase text-white/50">Current Deck</div>
             <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
               {report.deck_analysis.current_deck.map((card) => <CardToken key={card.name} card={card} />)}
+            </div>
+            <div className="mt-6 border-t border-white/10 pt-5">
+              <div className="text-xs font-black uppercase text-white/50">Recent Main Deck</div>
+              {recentMainDeck.cards.length ? (
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                  {recentMainDeck.cards.map((card) => <CardToken key={card} card={card} />)}
+                </div>
+              ) : (
+                <p className="mt-3 rounded-lg border border-white/10 bg-slate-950/60 p-3 text-sm font-semibold text-white/60">
+                  No eligible recent main deck could be identified.
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -536,10 +850,10 @@ function ReportDashboard({ report, onReset }: { report: Report; onReset: () => v
         <div className="grid gap-5 lg:grid-cols-[1.1fr_.9fr]">
           <div className="rounded-lg border border-white/10 bg-white/5 p-5">
             <h3 className="text-2xl font-black uppercase text-white">{report.behaviour_analysis.title}</h3>
-            <p className="mt-2 text-sm font-semibold leading-6 text-white/60">Deck-change behaviour is measured by comparing sequential battle decks. A panic switch means at least three cards changed after a loss.</p>
+            <p className="mt-2 text-sm font-semibold leading-6 text-white/60">Deck-change behaviour compares eligible personal-deck matches in chronological order. A panic-switch verdict requires at least three major deck changes after valid losses.</p>
             <div className="mt-5 grid gap-3 sm:grid-cols-4">
               <Metric label="Unique Decks" value={report.behaviour_analysis.unique_decks} tone="blue" />
-              <Metric label="Post-Loss Changes" value={report.behaviour_analysis.changes_after_losses} tone="red" />
+              <Metric label="Post-Loss Changes" value={`${report.behaviour_analysis.changes_after_losses}/${report.behaviour_analysis.post_loss_opportunities ?? 0}`} tone="red" />
               <Metric label="Main Deck WR" value={`${report.behaviour_analysis.main_deck_win_rate}%`} tone="gold" />
               <Metric label="Core Similarity" value={`${report.behaviour_analysis.core_deck_similarity_score}%`} tone="green" />
             </div>
@@ -549,7 +863,10 @@ function ReportDashboard({ report, onReset }: { report: Report; onReset: () => v
             <div className="text-xs font-black uppercase text-white/50">Overlevelled Fraud Score</div>
             <div className="mt-2 text-6xl font-black text-rose-300">{report.level_analysis.overlevelled_fraud_score}%</div>
             <div className="mt-2 text-lg font-black uppercase text-white">{report.level_analysis.tier}</div>
-            <p className="mt-3 text-sm font-semibold leading-6 text-white/60">Measures losses where your average card level was materially higher than the opponent's. It is a joke metric, not proof that you are actually bad.</p>
+            <p className="mt-3 text-sm font-semibold leading-6 text-white/60">Counts only eligible level-known losses where your average card level was at least 0.75 above the opponent's. It is a joke metric, not proof that you are actually bad.</p>
+            <p className="mt-3 text-sm font-semibold leading-6 text-white/55">
+              {report.level_analysis.meaningful_level_advantage_losses ?? 0} meaningful advantage losses from {report.level_analysis.total_losses_with_levels ?? 0} eligible level-known losses.
+            </p>
             <div className="mt-5 h-4 overflow-hidden rounded-full bg-white/10">
               <div className="h-full bg-rose-400" style={{ width: `${report.level_analysis.overlevelled_fraud_score}%` }} />
             </div>
@@ -634,7 +951,7 @@ function ReportDashboard({ report, onReset }: { report: Report; onReset: () => v
               <p className="mt-2 text-2xl font-black leading-8 text-white">{report.personality_report.intervention_tip}</p>
               <div className="mt-5 text-xs font-black uppercase text-white/50">Most Damning Evidence</div>
               <ul className="mt-3 space-y-2 text-sm font-semibold text-white/70">
-                {report.fraud_score.contributors.slice(0, 3).map((item) => <li key={item.label}>+{item.points}: {item.label}</li>)}
+                {report.fraud_score.contributors.slice(0, 3).map((item) => <li key={item.label}>+{item.applied_points ?? item.points}: {item.label}</li>)}
               </ul>
               <Evidence evidence={report.fraud_score.score_receipts} />
             </div>
@@ -684,7 +1001,11 @@ export default function App() {
   }
 
   if (report) {
-    return <ReportDashboard report={report} onReset={() => setReport(null)} />;
+    return (
+      <ReportErrorBoundary onReset={() => setReport(null)}>
+        <ReportDashboard report={report} onReset={() => setReport(null)} />
+      </ReportErrorBoundary>
+    );
   }
 
   return (

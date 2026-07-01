@@ -21,6 +21,7 @@ from app.services.analysis_service import (
     normalize_player_tag,
     rank_traumatic_opponent_cards,
 )
+from app.services.battle_normalizer import deck_key, material_deck_change, normalize_battles
 from app.models.schemas import ReportResponse
 from app.rules.deck_templates import DECK_STYLE_COPY
 from app.rules.expression_selector import ExpressionSelector
@@ -61,12 +62,12 @@ class AnalysisTests(unittest.TestCase):
 
     def sample_battles(self):
         return [
-            battle(self.main, self.opp, "loss", 14, 13),
-            battle(self.alt, self.opp, "loss", 14, 13),
-            battle(self.main, self.opp, "win", 14, 13),
-            battle(self.alt, self.opp, "loss", 14, 13),
-            battle(self.main, self.normal_opp, "win", 14, 13),
-            battle(self.alt, self.normal_opp, "loss", 14, 13),
+            {**battle(self.main, self.opp, "loss", 14, 13), "battleTime": "20260630T120000.000Z"},
+            {**battle(self.alt, self.opp, "loss", 14, 13), "battleTime": "20260630T120100.000Z"},
+            {**battle(self.main, self.opp, "win", 14, 13), "battleTime": "20260630T120200.000Z"},
+            {**battle(self.alt, self.opp, "loss", 14, 13), "battleTime": "20260630T120300.000Z"},
+            {**battle(self.main, self.normal_opp, "win", 14, 13), "battleTime": "20260630T120400.000Z"},
+            {**battle(self.alt, self.normal_opp, "loss", 14, 13), "battleTime": "20260630T120500.000Z"},
         ]
 
     def sample_player(self):
@@ -103,16 +104,16 @@ class AnalysisTests(unittest.TestCase):
         near = ["Mega Knight", "Wizard", "Balloon", "Rage", "Valkyrie", "Fireball", "Baby Dragon", "Skeleton Army"]
         self.assertEqual(deck_similarity(self.main, self.main), 1.0)
         self.assertEqual(deck_similarity(self.main, near), 0.75)
+        self.assertFalse(material_deck_change(deck_key(deck(self.main, 13)), deck_key(deck(list(reversed(self.main)), 14))))
 
     def test_panic_switcher_detection(self):
         behaviour = detect_panic_switching(PLAYER_TAG, self.sample_battles())
-        self.assertGreaterEqual(behaviour["changes_after_losses"], 2)
-        self.assertGreaterEqual(behaviour["unique_decks"], 2)
+        self.assertEqual(behaviour["classification"], "LIMITED_DATA")
+        self.assertNotIn(behaviour["classification"], {"PANIC_SWITCHER", "EMOTIONAL_DECK_BUILDER"})
 
     def test_emotional_support_card_detection(self):
         support = detect_emotional_support_card(PLAYER_TAG, self.sample_battles(), min_games=4)
-        self.assertTrue(support["detected"])
-        self.assertIn(support["card"], {"Mega Knight", "Wizard"})
+        self.assertFalse(support["detected"])
 
     def test_traumatic_opponent_card_ranking(self):
         ranked = rank_traumatic_opponent_cards(PLAYER_TAG, self.sample_battles(), min_encounters=4)
@@ -130,15 +131,26 @@ class AnalysisTests(unittest.TestCase):
     def test_troll_score_calculation(self):
         score = calculate_troll_score(
             {"win_rate": 33, "losses": 4, "three_crown_losses": 1},
-            {"deck_identity_score": 40, "average_elixir": 4.8},
-            {"natural_predator": {"matches": 4, "losses": 3}},
-            {"overlevelled_fraud_score": 75},
-            {"changes_after_losses": 3, "main_deck_games": 5, "main_deck_win_rate": 40},
+            {
+                "deck_identity_score": 40,
+                "average_elixir": 4.8,
+                "structural_issues": [
+                    {"label": "No clear win condition", "explanation": "No tower plan"},
+                    {"label": "No small spell", "explanation": "No cheap answer"},
+                    {"label": "Weak anti-air", "explanation": "Limited air answers"},
+                ],
+                "structural_issue_count": 3,
+            },
+            {"natural_predator": {"matches": 4, "losses": 3, "excess_loss_rate": 30, "evidence": ["Pattern"], "confidence": "medium"}},
+            {"overlevelled_fraud_score": 75, "total_losses_with_levels": 5, "meaningful_level_advantage_losses": 4, "evidence": ["Level pattern"], "confidence": "medium"},
+            {"classification": "PANIC_SWITCHER", "changes_after_losses": 3, "post_loss_opportunities": 3, "main_deck_games": 5, "main_deck_win_rate": 40, "evidence": ["Switching"], "confidence": "medium"},
             {"detected": True},
-            {"close_wins": 1, "close_losses": 4},
+            {"close_wins": 1, "close_losses": 4, "evidence": ["Close games"], "confidence": "medium"},
         )
-        self.assertGreater(score["score"], 50)
+        self.assertGreater(score["score"], 40)
         self.assertTrue(score["components"])
+        deck_points = sum(item["applied_points"] for item in score["components"] if item["group"] == "deck_construction")
+        self.assertLessEqual(deck_points, 15)
 
     def test_rule_engine_output_structure(self):
         roast = RoastEngine().render(
@@ -261,12 +273,71 @@ class AnalysisTests(unittest.TestCase):
             {"name": "Wizard", "type": "troop", "elixir": 5, "traits": ["splash", "anti_air"]},
             {"name": "Elite Barbarians", "type": "troop", "elixir": 6, "traits": []},
             {"name": "Valkyrie", "type": "troop", "elixir": 4, "traits": ["splash"]},
+            {"name": "Knight", "type": "troop", "elixir": 3, "traits": []},
+            {"name": "Mini P.E.K.K.A", "type": "troop", "elixir": 4, "traits": ["tank_killer"]},
+            {"name": "Giant", "type": "troop", "elixir": 5, "traits": ["win_condition"]},
+            {"name": "Skeleton Army", "type": "troop", "elixir": 3, "traits": ["swarm"]},
         ]
         traits = detect_deck_traits(heavy_troop_deck, 5.5, "Beatdown-ish")
         labels = {trait["label"] for trait in traits}
         self.assertIn("High elixir commitment", labels)
         self.assertIn("Weak anti-air", labels)
         self.assertIn("No small spell", labels)
+
+    def test_player_second_in_2v2_is_identified_but_excluded(self):
+        teammate = {"tag": "#TEAMMATE", "name": "Wrong", "crowns": 0, "cards": deck(self.alt)}
+        searched = {"tag": PLAYER_TAG, "name": "Tester", "crowns": 1, "cards": deck(self.main)}
+        two_v_two = {
+            "type": "2v2",
+            "battleTime": "20260630T120000.000Z",
+            "team": [teammate, searched],
+            "opponent": [
+                {"tag": "#A", "name": "A", "crowns": 2, "cards": deck(self.opp)},
+                {"tag": "#B", "name": "B", "crowns": 2, "cards": deck(self.normal_opp)},
+            ],
+        }
+        normalized = normalize_battles(PLAYER_TAG, [two_v_two])[0]
+        self.assertEqual(normalized.player_deck_names, self.main)
+        self.assertFalse(normalized.eligible_personal_deck)
+
+    def test_newest_first_logs_are_sorted_before_post_loss_logic(self):
+        old_loss = {**battle(self.main, self.opp, "loss"), "battleTime": "20260630T120000.000Z"}
+        new_after_loss = {**battle(self.alt, self.opp, "win"), "battleTime": "20260630T120100.000Z"}
+        normalized = normalize_battles(PLAYER_TAG, [new_after_loss, old_loss])
+        self.assertEqual([item.battle_time for item in normalized], ["20260630T120000.000Z", "20260630T120100.000Z"])
+
+    def test_draft_and_event_modes_are_excluded(self):
+        draft = {**battle(self.main, self.opp, "win"), "type": "tripleDraft"}
+        event = {**battle(self.main, self.opp, "win"), "type": "event"}
+        normalized = normalize_battles(PLAYER_TAG, [draft, event])
+        self.assertTrue(all(not item.eligible_personal_deck for item in normalized))
+
+    def test_one_main_deck_with_one_card_tests_is_stable(self):
+        one_swap = ["Mega Knight", "Wizard", "Elite Barbarians", "Rage", "Valkyrie", "Fireball", "Arrows", "Knight"]
+        battles = []
+        for index in range(10):
+            cards = one_swap if index in {3, 7} else self.main
+            battles.append({**battle(cards, self.opp, "win" if index % 2 else "loss"), "battleTime": f"20260630T12{index:02d}00.000Z"})
+        behaviour = detect_panic_switching(PLAYER_TAG, battles)
+        self.assertIn(behaviour["classification"], {"ONE_DECK_WARRIOR", "STABLE_WITH_MINOR_VARIATIONS"})
+        self.assertNotIn(behaviour["classification"], {"PANIC_SWITCHER", "EMOTIONAL_DECK_BUILDER"})
+
+    def test_true_repeated_post_loss_major_switcher_is_classified(self):
+        deck_c = ["Hog Rider", "Musketeer", "Cannon", "Ice Spirit", "Skeletons", "The Log", "Fireball", "Valkyrie"]
+        deck_d = ["Giant", "Wizard", "Baby Dragon", "Lightning", "Mini P.E.K.K.A", "Zap", "Bats", "Tombstone"]
+        sequence = [
+            (self.main, "loss"),
+            (self.alt, "loss"),
+            (deck_c, "loss"),
+            (deck_d, "loss"),
+            (self.main, "win"),
+            (self.alt, "loss"),
+            (deck_c, "win"),
+            (deck_d, "loss"),
+        ]
+        battles = [{**battle(cards, self.opp, result), "battleTime": f"20260630T12{index:02d}00.000Z"} for index, (cards, result) in enumerate(sequence)]
+        behaviour = detect_panic_switching(PLAYER_TAG, battles)
+        self.assertEqual(behaviour["classification"], "PANIC_SWITCHER")
 
     def test_card_icons_use_official_api_icon_urls_when_available(self):
         card = enrich_card({"name": "Mega Knight", "iconUrls": {"medium": "https://example.test/mega-knight.png"}})
