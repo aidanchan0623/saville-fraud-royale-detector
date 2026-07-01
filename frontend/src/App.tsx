@@ -30,7 +30,7 @@ import {
   YAxis,
 } from "recharts";
 import { getDemoVictims, getReport } from "./lib/api";
-import type { Card, CardEvidenceGalleryItem, DemoVictim, GalleryStat, Report, Roast, RoastModule } from "./types";
+import type { Card, CardEvidenceGalleryItem, DeckRoast, DemoVictim, GalleryStat, Report, Roast, RoastModule } from "./types";
 
 function safeArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
@@ -251,6 +251,50 @@ function RoastModuleList({ modules }: { modules: RoastModule[] }) {
   );
 }
 
+function friendlyDeckKind(kind: string) {
+  const labels: Record<string, string> = {
+    exact_meta: "Yes, The Internet Made This First",
+    meta_adjacent: "You Tried To Improve It",
+    archetype_family: "Recognisable Nonsense",
+    custom_signature: "Custom Group Chat",
+    insufficient_data: "Evidence Missing",
+  };
+  return labels[kind] ?? kind.replace(/_/g, " ");
+}
+
+function DeckRoastPanel({ roast, compact = false }: { roast: DeckRoast; compact?: boolean }) {
+  const mentioned = roast.mentioned_cards.length ? roast.mentioned_cards : roast.anchor_cards;
+  return (
+    <div className="rounded-lg border border-white/10 bg-slate-950/65 p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-xs font-black uppercase text-amber-200">{friendlyDeckKind(roast.style_kind)}</div>
+          <h2 className={`${compact ? "text-2xl" : "text-4xl"} mt-2 font-black uppercase leading-tight text-white`}>{roast.headline}</h2>
+        </div>
+        <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-right">
+          <div className="text-[10px] font-black uppercase text-white/45">Confidence</div>
+          <div className="text-sm font-black uppercase text-emerald-200">{roast.confidence}</div>
+        </div>
+      </div>
+      <p className="mt-4 text-lg font-black leading-7 text-amber-50">"{roast.one_liner}"</p>
+      <p className="mt-3 text-base font-semibold leading-7 text-white/78">{roast.main_roast}</p>
+      {roast.supporting_roast && (
+        <p className="mt-3 rounded-lg border border-sky-300/20 bg-sky-400/10 p-3 text-sm font-bold leading-6 text-sky-50">{roast.supporting_roast}</p>
+      )}
+      {mentioned.length > 0 && (
+        <div className="mt-4">
+          <div className="text-xs font-black uppercase text-white/50">Cards Named In The Roast</div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            {mentioned.map((card) => <CardToken key={`${roast.headline}-${card.name}`} card={card} />)}
+          </div>
+        </div>
+      )}
+      <div className="mt-4 text-xs font-black uppercase text-white/45">{roast.evidence_summary}</div>
+      <Evidence evidence={roast.evidence} />
+    </div>
+  );
+}
+
 function Section({ title, icon, children }: { title: string; icon: ReactNode; children: ReactNode }) {
   return (
     <section className="mx-auto w-full max-w-7xl px-4 py-7 sm:px-6 lg:px-8">
@@ -295,7 +339,7 @@ function Evidence({ evidence }: { evidence: string[] }) {
   return (
     <details className="mt-4 rounded-lg border border-amber-300/25 bg-amber-300/10 p-3">
       <summary className="flex cursor-pointer items-center gap-2 text-sm font-black uppercase text-amber-100">
-        <ReceiptText size={16} /> Show Receipts
+        <ReceiptText size={16} /> Show Me The Evidence
       </summary>
       <ul className="mt-3 space-y-2 text-sm text-amber-50/80">
         {evidence.map((item) => (
@@ -460,6 +504,20 @@ function Landing({
   );
 }
 
+const DEFAULT_DECK_ROAST: DeckRoast = {
+  headline: "WHAT THE HELL IS THIS DECK?",
+  one_liner: "The app did not receive enough card-specific deck copy, so it is keeping the roast on standby.",
+  main_roast: "Eight cards are required before the group chat can start bullying responsibly.",
+  supporting_roast: "Deck receipts unavailable.",
+  style_kind: "insufficient_data",
+  anchor_cards: [],
+  mentioned_cards: [],
+  tone: "friendly_roast",
+  confidence: "low",
+  evidence_summary: "Deck-roast payload missing or incomplete.",
+  evidence: [],
+};
+
 const DEFAULT_REPORT: Report = {
   schema_version: "frontend-fallback",
   player_summary: {
@@ -496,13 +554,16 @@ const DEFAULT_REPORT: Report = {
     main_character: {},
   },
   deck_personality: {
-    title: "Deck Evidence Limited",
+    title: DEFAULT_DECK_ROAST.headline,
     style: "Unclassified deck style",
-    plain_explanation: "The backend did not provide enough current-deck detail for a confident deck diagnosis.",
-    roast: "The court cannot confirm a deck incident from missing paperwork.",
+    plain_explanation: DEFAULT_DECK_ROAST.one_liner,
+    roast: DEFAULT_DECK_ROAST.main_roast,
+    supporting_roast: DEFAULT_DECK_ROAST.supporting_roast,
     traits: [],
     evidence: ["Deck diagnosis unavailable or incomplete."],
     confidence: "low",
+    current_deck_roast: DEFAULT_DECK_ROAST,
+    recent_main_deck_roast: null,
   },
   matchup_analysis: {
     traumatic_cards: [],
@@ -725,6 +786,35 @@ function normalizeRoastModule(value: unknown): RoastModule {
   };
 }
 
+function normalizeDeckRoast(value: unknown): DeckRoast {
+  const item = isRecord(value) ? value : {};
+  const match = isRecord(item.deck_match) ? item.deck_match : {};
+  return {
+    ...DEFAULT_DECK_ROAST,
+    headline: String(item.headline ?? DEFAULT_DECK_ROAST.headline),
+    one_liner: String(item.one_liner ?? DEFAULT_DECK_ROAST.one_liner),
+    main_roast: String(item.main_roast ?? DEFAULT_DECK_ROAST.main_roast),
+    supporting_roast: String(item.supporting_roast ?? DEFAULT_DECK_ROAST.supporting_roast),
+    style_kind: String(item.style_kind ?? DEFAULT_DECK_ROAST.style_kind),
+    anchor_cards: safeArray<unknown>(item.anchor_cards).map(normalizeCard).filter((card): card is Card => Boolean(card)),
+    mentioned_cards: safeArray<unknown>(item.mentioned_cards).map(normalizeCard).filter((card): card is Card => Boolean(card)),
+    tone: String(item.tone ?? DEFAULT_DECK_ROAST.tone),
+    confidence: normalizeConfidence(item.confidence),
+    evidence_summary: String(item.evidence_summary ?? DEFAULT_DECK_ROAST.evidence_summary),
+    evidence: safeArray<string>(item.evidence),
+    deck_match: {
+      style_kind: typeof match.style_kind === "string" ? match.style_kind : undefined,
+      matched_deck_name: typeof match.matched_deck_name === "string" ? match.matched_deck_name : null,
+      family: typeof match.family === "string" ? match.family : null,
+      matched_count: typeof match.matched_count === "number" ? match.matched_count : undefined,
+      matched_cards: safeArray<string>(match.matched_cards),
+      missing_cards: safeArray<string>(match.missing_cards),
+      extra_cards: safeArray<string>(match.extra_cards),
+      snapshot_date: typeof match.snapshot_date === "string" ? match.snapshot_date : null,
+    },
+  };
+}
+
 function withReportDefaults(rawReport: unknown): Report {
   const raw = isRecord(rawReport) ? rawReport : {};
   const player = isRecord(raw.player_summary) ? raw.player_summary : {};
@@ -764,6 +854,16 @@ function withReportDefaults(rawReport: unknown): Report {
       composition: { ...DEFAULT_REPORT.deck_analysis.composition, ...composition },
       most_used_cards: safeArray<Report["deck_analysis"]["most_used_cards"][number]>(deck.most_used_cards),
       most_common_deck: isRecord(deck.most_common_deck) ? { ...DEFAULT_REPORT.deck_analysis.most_common_deck, ...deck.most_common_deck, cards: safeArray<string>(deck.most_common_deck.cards) } : DEFAULT_REPORT.deck_analysis.most_common_deck,
+      recent_main_deck: isRecord(deck.recent_main_deck)
+        ? {
+            cards: safeArray<string>(deck.recent_main_deck.cards),
+            card_details: safeArray<unknown>(deck.recent_main_deck.card_details).map(normalizeCard).filter((card): card is Card => Boolean(card)),
+            uses: typeof deck.recent_main_deck.uses === "number" ? deck.recent_main_deck.uses : 0,
+            key: safeArray<string>(deck.recent_main_deck.key),
+          }
+        : DEFAULT_REPORT.deck_analysis.recent_main_deck,
+      current_recent_added_cards: safeArray<string>(deck.current_recent_added_cards),
+      current_recent_removed_cards: safeArray<string>(deck.current_recent_removed_cards),
       emotional_support_card: isRecord(deck.emotional_support_card) ? deck.emotional_support_card : {},
       main_character: isRecord(deck.main_character) ? deck.main_character : {},
     },
@@ -772,6 +872,8 @@ function withReportDefaults(rawReport: unknown): Report {
       ...deckPersonality,
       traits: safeArray<Report["deck_personality"]["traits"][number]>(deckPersonality.traits),
       evidence: safeArray<string>(deckPersonality.evidence),
+      current_deck_roast: normalizeDeckRoast(deckPersonality.current_deck_roast),
+      recent_main_deck_roast: isRecord(deckPersonality.recent_main_deck_roast) ? normalizeDeckRoast(deckPersonality.recent_main_deck_roast) : null,
     },
     matchup_analysis: {
       ...DEFAULT_REPORT.matchup_analysis,
@@ -932,8 +1034,11 @@ function ReportDashboard({ report: rawReport, onReset }: { report: Report; onRes
   }));
   const recentMainDeck = report.deck_analysis.recent_main_deck ?? {
     cards: report.deck_analysis.most_common_deck.cards,
+    card_details: [],
     uses: report.deck_analysis.most_common_deck.uses,
   };
+  const currentDeckRoast = report.deck_personality.current_deck_roast ?? DEFAULT_DECK_ROAST;
+  const recentMainDeckRoast = report.deck_personality.recent_main_deck_roast ?? null;
   const galleryItems = report.card_evidence_gallery;
   const featuredGallery = galleryItems.filter((item) => ["favourite_card", "feared_card"].includes(item.category)).slice(0, 2);
   const remainingGallery = galleryItems.filter((item) => !featuredGallery.some((featured) => featured.id === item.id));
@@ -942,7 +1047,6 @@ function ReportDashboard({ report: rawReport, onReset }: { report: Report; onRes
     excluded_matches: report.battle_summary.excluded_battles ?? 0,
     note: "Only eligible personal-deck battles drive behavioural claims.",
   };
-  const currentMatchesRecent = report.deck_analysis.current_matches_recent_main_deck ?? true;
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
@@ -1079,30 +1183,27 @@ function ReportDashboard({ report: rawReport, onReset }: { report: Report; onRes
         </div>
       </Section>
 
-      <Section title="Deck Evidence" icon={<BadgeAlert size={20} />}>
+      <Section title="What The Hell Is This Deck?" icon={<BadgeAlert size={20} />}>
         <div className="grid gap-5 lg:grid-cols-[.92fr_1.08fr]">
-          <div className="rounded-lg border border-white/10 bg-white/5 p-5">
-            <div className="text-xs font-black uppercase text-white/50">Current Deck Diagnosis</div>
-            <h2 className="mt-2 text-4xl font-black uppercase text-white">{report.deck_personality.title}</h2>
-            <p className="mt-4 text-base font-semibold leading-7 text-white/70">{report.deck_personality.plain_explanation}</p>
-            <p className="mt-4 rounded-lg border border-rose-300/20 bg-rose-400/10 p-4 text-lg font-black leading-7 text-rose-50">"{report.deck_personality.roast}"</p>
-            {!currentMatchesRecent && (
-              <p className="mt-4 rounded-lg border border-sky-300/25 bg-sky-400/10 p-3 text-sm font-bold leading-6 text-sky-50">
-                Current deck differs from the recent main deck. Historical results may reflect a previous deck.
-              </p>
+          <div className="space-y-5">
+            <DeckRoastPanel roast={currentDeckRoast} />
+            {recentMainDeckRoast && (
+              <div>
+                <div className="mb-3 text-xs font-black uppercase text-white/50">The Usual Suspects Recently</div>
+                <DeckRoastPanel roast={recentMainDeckRoast} compact />
+              </div>
             )}
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               {report.deck_personality.traits.map((trait) => (
                 <div key={trait.label} className="rounded-lg border border-white/10 bg-slate-950/60 p-3">
-                  <div className="font-black text-white">{trait.label}</div>
+                  <div className="font-black text-white">{trait.label === "Incomplete card metadata" ? "The App Is Still Learning Some Card Jobs" : trait.label}</div>
                   <p className="mt-1 text-sm font-semibold leading-6 text-white/60">{trait.explanation}</p>
                 </div>
               ))}
             </div>
-            <Evidence evidence={report.deck_personality.evidence} />
           </div>
           <div className="rounded-lg border border-white/10 bg-white/5 p-5">
-            <div className="text-xs font-black uppercase text-white/50">Eligible Battle History</div>
+            <div className="text-xs font-black uppercase text-white/50">The Receipts</div>
             <div className="grid gap-3 sm:grid-cols-4">
               <Metric label="Avg Elixir" value={report.deck_analysis.average_elixir} tone="gold" />
               <Metric label="Eligible" value={eligibleHistory.eligible_matches} tone="blue" />
@@ -1110,15 +1211,15 @@ function ReportDashboard({ report: rawReport, onReset }: { report: Report; onRes
               <Metric label="Main Uses" value={recentMainDeck.uses} tone="green" />
             </div>
             <p className="mt-3 text-sm font-semibold leading-6 text-white/55">{eligibleHistory.note}</p>
-            <div className="mt-5 text-xs font-black uppercase text-white/50">Current Deck</div>
+            <div className="mt-5 text-xs font-black uppercase text-white/50">What You Brought Today</div>
             <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
               {report.deck_analysis.current_deck.map((card) => <CardToken key={card.name} card={card} />)}
             </div>
             <div className="mt-6 border-t border-white/10 pt-5">
-              <div className="text-xs font-black uppercase text-white/50">Recent Main Deck</div>
+              <div className="text-xs font-black uppercase text-white/50">The Usual Suspects</div>
               {recentMainDeck.cards.length ? (
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                  {recentMainDeck.cards.map((card) => <CardToken key={card} card={card} />)}
+                  {(recentMainDeck.card_details?.length ? recentMainDeck.card_details : recentMainDeck.cards).map((card) => <CardToken key={typeof card === "string" ? card : card.name} card={card} />)}
                 </div>
               ) : (
                 <p className="mt-3 rounded-lg border border-white/10 bg-slate-950/60 p-3 text-sm font-semibold text-white/60">
@@ -1126,6 +1227,7 @@ function ReportDashboard({ report: rawReport, onReset }: { report: Report; onRes
                 </p>
               )}
             </div>
+            <Evidence evidence={report.deck_personality.evidence} />
           </div>
         </div>
       </Section>

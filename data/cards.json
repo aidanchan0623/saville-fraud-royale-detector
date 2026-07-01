@@ -50,5 +50,11 @@
   {"name":"Electro Spirit","elixir":1,"type":"troop","rarity":"common","traits":["cycle","anti_air","stun"]},
   {"name":"Earthquake","elixir":3,"type":"spell","rarity":"rare","traits":["small_spell","building_damage"]},
   {"name":"Archers","elixir":3,"type":"troop","rarity":"common","traits":["anti_air","ranged"]},
-  {"name":"Bats","elixir":2,"type":"troop","rarity":"common","traits":["air","anti_air","cycle","swarm"]}
+  {"name":"Bats","elixir":2,"type":"troop","rarity":"common","traits":["air","anti_air","cycle","swarm"]},
+  {"name":"Sparky","elixir":6,"type":"troop","rarity":"legendary","traits":["ranged","splash","ground","heavy_damage"]},
+  {"name":"Dart Goblin","elixir":3,"type":"troop","rarity":"rare","traits":["anti_air","ranged","bait","cycle"]},
+  {"name":"Skeleton Barrel","elixir":3,"type":"troop","rarity":"common","traits":["win_condition","air","bait","swarm"]},
+  {"name":"Witch","elixir":5,"type":"troop","rarity":"epic","traits":["splash","anti_air","ranged","spawner"]},
+  {"name":"Inferno Dragon","elixir":4,"type":"troop","rarity":"legendary","traits":["air","anti_air","tank_killer"]},
+  {"name":"Fisherman","elixir":3,"type":"troop","rarity":"legendary","traits":["control","ground","pull"]}
 ]

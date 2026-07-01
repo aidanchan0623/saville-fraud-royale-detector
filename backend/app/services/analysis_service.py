@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.rules.deck_templates import DECK_STYLE_COPY, TRAIT_EXPLANATIONS
+from app.rules.deck_roast_composer import compose_deck_roast
 from app.rules.expression_selector import ExpressionSelector
 from app.rules.fraud_score_templates import CONTRIBUTOR_COPY, TIER_COPY
 from app.rules.matchup_rules import label_opponent_core, most_common_loss_core
@@ -27,7 +28,7 @@ from app.services.card_data_service import CardDataService, get_card_service
 from app.services.roast_engine import RoastEngine
 
 
-REPORT_SCHEMA_VERSION = "report-v4"
+REPORT_SCHEMA_VERSION = "report-v5"
 LEVEL_ADVANTAGE_THRESHOLD = 0.75
 
 
@@ -625,8 +626,16 @@ def analyse_deck(player: dict[str, Any], player_tag: str, battles: list[dict[str
     key_counts = Counter(battle.player_deck_key for battle in eligible)
     common_key, common_count = key_counts.most_common(1)[0] if key_counts else (tuple(), 0)
     signature_to_deck = {battle.player_deck_key: battle.player_deck_names for battle in eligible}
+    signature_to_card_deck = {battle.player_deck_key: [enrich_card(card, card_service) for card in battle.player_deck] for battle in eligible}
     recent_main_deck = signature_to_deck.get(common_key, [])
+    recent_main_card_deck = signature_to_card_deck.get(common_key, [])
     current_matches_recent = bool(current_key and common_key and same_or_minor_variation(current_key, common_key))
+    current_exact_recent = bool(current_key and common_key and current_key == common_key)
+    current_recent_shared = shared_card_count(current_key, common_key) if current_key and common_key else 0
+    current_names = {card.get("name", "") for card in current_deck}
+    recent_names = set(recent_main_deck)
+    current_recent_added = sorted(current_names - recent_names)
+    current_recent_removed = sorted(recent_names - current_names)
 
     if issue_count >= 4:
         personality_rule = {
@@ -665,12 +674,16 @@ def analyse_deck(player: dict[str, Any], player_tag: str, battles: list[dict[str
         },
         "most_used_cards": most_used,
         "most_common_deck": {"cards": recent_main_deck, "uses": common_count},
-        "recent_main_deck": {"cards": recent_main_deck, "uses": common_count, "key": list(common_key)},
+        "recent_main_deck": {"cards": recent_main_deck, "card_details": recent_main_card_deck, "uses": common_count, "key": list(common_key)},
         "current_matches_recent_main_deck": current_matches_recent,
+        "current_exact_recent_main_deck": current_exact_recent,
+        "current_recent_shared_cards": current_recent_shared,
+        "current_recent_added_cards": current_recent_added,
+        "current_recent_removed_cards": current_recent_removed,
         "eligible_battle_history": {
             "eligible_matches": len(eligible),
             "excluded_matches": len(normalized) - len(eligible),
-            "note": "Current deck is judged separately from eligible recent battle history.",
+            "note": "Only eligible personal-deck battles count as receipts; party modes and weird formats stay out of the argument.",
         },
         "estimated_deck_style": style,
         "deck_identity_score": identity,
@@ -1231,31 +1244,54 @@ def build_fraud_score(
 
 def build_deck_personality(deck_analysis: dict[str, Any], selector: ExpressionSelector) -> dict[str, Any]:
     style = deck_analysis["estimated_deck_style"]
-    copy = DECK_STYLE_COPY.get(style, {"plain": "This current deck does not cleanly match a known archetype, which is not automatically a problem.", "roasts": ["Unclassified is not guilty. The court has learned restraint."]})
+    copy = DECK_STYLE_COPY.get(style, {"plain": "Local deck style evidence is limited.", "roasts": ["The deck is custom enough that the receipts need to do the talking."]})
     traits = deck_analysis.get("structural_issues", [])
     issue_count = deck_analysis.get("structural_issue_count", 0)
-    if issue_count >= 4:
-        title = "Tactical Soup"
-        roast = "Multiple independent current-deck issues crossed the threshold. The spoon is evidence-based."
-    elif style == "Unclassified deck style":
-        title = "Unclassified Deck Style"
-        roast = "The deck dodged the archetype label, but the app refuses to call that a crime by itself."
-    else:
-        title = style
-        roast = selector.choose(copy["roasts"], f"deck:{style}:roast")
     evidence = list(deck_analysis["personality_rule"].get("evidence", []))
     evidence.extend([f"{trait['label']}: {trait['explanation']}" for trait in traits])
     if not deck_analysis.get("current_matches_recent_main_deck", True):
         evidence.append("Current deck differs from the recent main deck. Historical results may reflect a previous deck.")
+    current_roast = compose_deck_roast(
+        cards=deck_analysis.get("current_deck", []),
+        estimated_style=style,
+        traits=traits,
+        average_elixir=deck_analysis.get("average_elixir", 0),
+        selector=selector,
+        deck_role="current_deck",
+        recent_main_cards=deck_analysis.get("recent_main_deck", {}).get("card_details", []),
+        recent_main_uses=deck_analysis.get("recent_main_deck", {}).get("uses", 0),
+        eligible_matches=deck_analysis.get("eligible_battle_history", {}).get("eligible_matches", 0),
+    )
+    recent_cards = deck_analysis.get("recent_main_deck", {}).get("card_details", [])
+    recent_roast = None
+    if recent_cards and not deck_analysis.get("current_exact_recent_main_deck", False):
+        recent_average = average_deck_elixir(recent_cards)
+        recent_style = safe_estimate_deck_style(recent_cards, recent_average)
+        recent_roast = compose_deck_roast(
+            cards=recent_cards,
+            estimated_style=recent_style,
+            traits=detect_deck_traits(recent_cards, recent_average, recent_style),
+            average_elixir=recent_average,
+            selector=selector,
+            deck_role="recent_main_deck",
+            recent_main_cards=recent_cards,
+            recent_main_uses=deck_analysis.get("recent_main_deck", {}).get("uses", 0),
+            eligible_matches=deck_analysis.get("eligible_battle_history", {}).get("eligible_matches", 0),
+        )
+    evidence.extend(current_roast.get("evidence", []))
     return {
-        "title": title,
+        "title": current_roast["headline"],
         "style": style,
-        "plain_explanation": copy["plain"],
-        "roast": roast,
+        "plain_explanation": current_roast["one_liner"],
+        "roast": current_roast["main_roast"],
+        "supporting_roast": current_roast["supporting_roast"],
         "traits": traits,
         "evidence": evidence,
-        "confidence": deck_analysis["personality_rule"].get("confidence", "medium"),
+        "confidence": current_roast.get("confidence", deck_analysis["personality_rule"].get("confidence", "medium")),
         "current_matches_recent_main_deck": deck_analysis.get("current_matches_recent_main_deck", False),
+        "current_deck_roast": current_roast,
+        "recent_main_deck_roast": recent_roast,
+        "legacy_plain_explanation": copy["plain"],
     }
 
 

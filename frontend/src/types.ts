@@ -52,6 +52,30 @@ export interface RoastModule {
   score_impact?: string;
 }
 
+export interface DeckRoast {
+  headline: string;
+  one_liner: string;
+  main_roast: string;
+  supporting_roast: string;
+  style_kind: string;
+  anchor_cards: Card[];
+  mentioned_cards: Card[];
+  tone: string;
+  confidence: Confidence;
+  evidence_summary: string;
+  evidence: string[];
+  deck_match?: {
+    style_kind?: string;
+    matched_deck_name?: string | null;
+    family?: string | null;
+    matched_count?: number;
+    matched_cards?: string[];
+    missing_cards?: string[];
+    extra_cards?: string[];
+    snapshot_date?: string | null;
+  };
+}
+
 export interface Report {
   schema_version: string;
   player_summary: {
@@ -85,8 +109,12 @@ export interface Report {
     composition: { troops: number; spells: number; buildings: number; unknown?: number };
     most_used_cards: Array<{ card: string; used: number; wins: number; losses: number; win_rate: number }>;
     most_common_deck: { cards: string[]; uses: number };
-    recent_main_deck?: { cards: string[]; uses: number; key?: string[] };
+    recent_main_deck?: { cards: string[]; card_details?: Card[]; uses: number; key?: string[] };
     current_matches_recent_main_deck?: boolean;
+    current_exact_recent_main_deck?: boolean;
+    current_recent_shared_cards?: number;
+    current_recent_added_cards?: string[];
+    current_recent_removed_cards?: string[];
     eligible_battle_history?: { eligible_matches: number; excluded_matches: number; note: string };
     estimated_deck_style: string;
     deck_identity_score: number;
@@ -105,6 +133,10 @@ export interface Report {
     evidence: string[];
     confidence: Confidence;
     current_matches_recent_main_deck?: boolean;
+    supporting_roast?: string;
+    current_deck_roast?: DeckRoast;
+    recent_main_deck_roast?: DeckRoast | null;
+    legacy_plain_explanation?: string;
   };
   matchup_analysis: {
     traumatic_cards: Array<{ card: string; faced: number; losses: number; wins: number; win_rate_against: number; loss_rate: number; baseline_loss_rate?: number; excess_loss_rate?: number; confidence: Confidence; evidence?: string[] }>;

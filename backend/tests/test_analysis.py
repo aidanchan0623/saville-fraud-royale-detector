@@ -27,6 +27,7 @@ from app.services.analysis_service import (
 from app.services.battle_normalizer import deck_key, material_deck_change, normalize_battles
 from app.models.schemas import ReportResponse
 from app.rules.deck_templates import DECK_STYLE_COPY
+from app.rules.deck_roast_composer import compose_deck_roast, deck_roast_catalog_counts
 from app.rules.expression_selector import ExpressionSelector
 from app.rules.fraud_score_templates import CONTRIBUTOR_COPY, TIER_COPY
 from app.rules.personality_templates import GOBLIN_INTERVENTIONS, PERSONALITY_TEMPLATES
@@ -116,6 +117,23 @@ class AnalysisTests(unittest.TestCase):
             if candidate not in cards:
                 cards.append(candidate)
         return cards
+
+    def compose_deck_copy(self, names, seed="deck-copy", recent=None, uses=0, eligible=0):
+        cards = deck(names)
+        style = "Unclassified deck style"
+        average = average_deck_elixir(cards)
+        traits = detect_deck_traits(cards, average, style)
+        return compose_deck_roast(
+            cards=cards,
+            estimated_style=style,
+            traits=traits,
+            average_elixir=average,
+            selector=ExpressionSelector(seed),
+            deck_role="current_deck",
+            recent_main_cards=deck(recent) if recent else cards,
+            recent_main_uses=uses or eligible,
+            eligible_matches=eligible or uses or 12,
+        )
 
     def test_player_tag_normalization(self):
         self.assertEqual(normalize_player_tag(" %23abc-123 "), "ABC123")
@@ -285,6 +303,59 @@ class AnalysisTests(unittest.TestCase):
         for copy in DECK_STYLE_COPY.values():
             self.assertGreaterEqual(len(copy["roasts"]), 3)
             self.assertTrue(copy["plain"])
+
+    def test_deck_roast_catalog_has_required_variety(self):
+        counts = deck_roast_catalog_counts()
+        self.assertGreaterEqual(counts["exact_meta"], 15)
+        self.assertGreaterEqual(counts["meta_adjacent"], 15)
+        self.assertGreaterEqual(counts["group_project"], 10)
+        self.assertGreaterEqual(counts["fallback"], 10)
+        self.assertGreaterEqual(counts["combo_hooks"], 8)
+        for anchor, count in counts["anchor_title_categories"].items():
+            self.assertGreaterEqual(count, 10, anchor)
+        for anchor, count in counts["anchor_one_liner_categories"].items():
+            self.assertGreaterEqual(count, 10, anchor)
+
+    def test_custom_sparky_deck_roast_is_card_specific(self):
+        names = ["Electro Spirit", "Knight", "Goblin Gang", "Sparky", "Tesla", "Arrows", "Dart Goblin", "Ice Spirit"]
+        roast = self.compose_deck_copy(names, seed="sparky-case")
+        combined = " ".join([roast["headline"], roast["one_liner"], roast["main_roast"]])
+        self.assertEqual(roast["style_kind"], "custom_signature")
+        self.assertNotIn("Unclassified", roast["headline"])
+        self.assertIn("Sparky", combined)
+        self.assertTrue(any(card in combined for card in ["Electro Spirit", "Tesla", "Goblin Gang", "Dart Goblin", "Ice Spirit"]))
+        self.assertTrue(roast["mentioned_cards"])
+
+    def test_custom_mega_witch_barrel_deck_roast_mentions_real_combo(self):
+        names = ["Skeleton Barrel", "Mini P.E.K.K.A", "Princess", "The Log", "Bats", "Witch", "Mega Knight", "Inferno Dragon"]
+        roast = self.compose_deck_copy(names, seed="mega-witch-case")
+        combined = " ".join([roast["headline"], roast["one_liner"], roast["main_roast"]])
+        self.assertEqual(roast["style_kind"], "custom_signature")
+        self.assertTrue(any(card in combined for card in ["Mega Knight", "Witch", "Skeleton Barrel", "Inferno Dragon", "Mini P.E.K.K.A"]))
+        self.assertNotIn("Unclassified", roast["headline"])
+
+    def test_exact_meta_deck_roast_names_copy_and_match_count(self):
+        names = ["Hog Rider", "Musketeer", "Cannon", "Ice Spirit", "Skeletons", "The Log", "Fireball", "Valkyrie"]
+        roast = self.compose_deck_copy(names, seed="exact-meta")
+        self.assertEqual(roast["style_kind"], "exact_meta")
+        self.assertIn("2.6 Hog Cycle", roast["one_liner"] + roast["headline"] + roast["evidence_summary"])
+        self.assertEqual(roast["deck_match"]["matched_count"], 8)
+        self.assertIn("8/8", roast["evidence_summary"])
+
+    def test_meta_adjacent_deck_roast_mentions_substitutions(self):
+        names = ["Hog Rider", "Musketeer", "Tesla", "Ice Spirit", "Goblin Gang", "The Log", "Fireball", "Valkyrie"]
+        roast = self.compose_deck_copy(names, seed="meta-adjacent")
+        combined = " ".join([roast["headline"], roast["one_liner"], roast["main_roast"], roast["evidence_summary"]])
+        self.assertEqual(roast["style_kind"], "meta_adjacent")
+        self.assertEqual(roast["deck_match"]["matched_count"], 6)
+        self.assertIn("Hog Cycle", combined)
+        self.assertTrue(any(card in combined for card in ["Tesla", "Goblin Gang"]))
+
+    def test_deck_roast_context_line_changes_when_current_deck_differs(self):
+        current = ["Electro Spirit", "Knight", "Goblin Gang", "Sparky", "Tesla", "Arrows", "Dart Goblin", "Ice Spirit"]
+        recent = ["Hog Rider", "Musketeer", "Cannon", "Ice Spirit", "Skeletons", "The Log", "Fireball", "Valkyrie"]
+        roast = self.compose_deck_copy(current, seed="deck-diff", recent=recent, uses=10, eligible=12)
+        self.assertIn("not the deck", roast["supporting_roast"].lower())
 
     def test_fraud_score_contributors_are_rich_and_plain_language(self):
         report = self.build_sample_report()
