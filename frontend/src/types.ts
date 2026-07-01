@@ -19,6 +19,39 @@ export interface Roast {
   metrics: Record<string, unknown>;
 }
 
+export interface GalleryStat {
+  label: string;
+  value: string | number | null;
+  tone?: "blue" | "gold" | "red" | "green";
+}
+
+export interface CardEvidenceGalleryItem {
+  id: string;
+  category: string;
+  title: string;
+  card?: Card | null;
+  card_name?: string | null;
+  roast: string;
+  stats: GalleryStat[];
+  evidence: string[];
+  confidence: Confidence;
+}
+
+export interface RoastModule {
+  id: string;
+  category: string;
+  title: string;
+  text: string;
+  confidence: Confidence;
+  confidence_requirement?: string;
+  severity: string;
+  eligibility_conditions: string[];
+  required_evidence: string[];
+  evidence: string[];
+  linked_cards: Card[];
+  score_impact?: string;
+}
+
 export interface Report {
   schema_version: string;
   player_summary: {
@@ -123,6 +156,75 @@ export interface Report {
     three_crown_wins: number;
   };
   divorce_recommendation: Record<string, any>;
+  favourite_card_analysis: {
+    detected?: boolean;
+    favourite_card?: Card | null;
+    favourite_card_name?: string | null;
+    favourite_card_usage_count: number;
+    favourite_card_usage_rate: number;
+    favourite_card_win_rate: number;
+    player_baseline_win_rate: number;
+    favourite_card_performance_delta: number;
+    favourite_card_confidence: Confidence;
+    favourite_card_reason: string;
+    is_true_single_card_favourite: boolean;
+    is_full_deck_loyalist_case: boolean;
+    eligible_match_count: number;
+    roast?: string;
+    evidence: string[];
+  };
+  feared_card_analysis: {
+    feared_card?: Card | null;
+    feared_card_name?: string | null;
+    feared_card_image?: string | null;
+    leading_candidate?: Card | null;
+    leading_candidate_name?: string | null;
+    games_against: number;
+    wins_against: number;
+    losses_against: number;
+    loss_rate_against: number;
+    baseline_loss_rate: number;
+    excess_loss_rate: number;
+    feared_card_confidence: Confidence;
+    evidence_summary: string;
+    is_insufficient_evidence: boolean;
+    roast?: string;
+    evidence: string[];
+  };
+  win_rate_verdict: {
+    total_eligible_matches: number;
+    wins: number;
+    losses: number;
+    draws: number;
+    win_rate: number;
+    loss_rate: number;
+    close_wins: number;
+    close_losses: number;
+    close_game_win_rate?: number | null;
+    main_deck_win_rate?: number | null;
+    main_deck_games?: number | null;
+    replacement_deck_win_rate?: number | null;
+    replacement_deck_games?: number | null;
+    confidence: Confidence;
+    trend: string;
+    trend_delta: number;
+    band?: string;
+    roast?: string;
+    evidence: string[];
+  };
+  roast_narrative: {
+    opening_charge: string;
+    opening_evidence: string[];
+    favourite_card_indictment: string;
+    feared_card_trauma: string;
+    win_rate_verdict: string;
+    deck_personality: string;
+    final_title: string;
+    final_verdict: string;
+    arc: string[];
+  };
+  roast_modules: RoastModule[];
+  card_evidence_gallery: CardEvidenceGalleryItem[];
   fraud_score: {
     score: number;
     tier: string;
@@ -160,8 +262,8 @@ export interface Report {
 
 export interface Card {
   name: string;
-  level: number;
-  elixir: number;
+  level?: number | null;
+  elixir?: number | null;
   type: string;
   rarity: string;
   traits: string[];

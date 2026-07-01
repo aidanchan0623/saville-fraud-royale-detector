@@ -7,6 +7,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.services.analysis_service import (
     AnalysisService,
     REPORT_SCHEMA_VERSION,
+    analyse_favourite_card,
+    analyse_feared_card,
+    analyse_win_rate_verdict,
     average_deck_elixir,
     build_fraud_score,
     build_deck_personality,
@@ -27,6 +30,7 @@ from app.rules.deck_templates import DECK_STYLE_COPY
 from app.rules.expression_selector import ExpressionSelector
 from app.rules.fraud_score_templates import CONTRIBUTOR_COPY, TIER_COPY
 from app.rules.personality_templates import GOBLIN_INTERVENTIONS, PERSONALITY_TEMPLATES
+from app.rules.roast_composer import template_catalog_counts
 from app.services.card_data_service import get_card_service
 from app.services.roast_engine import RoastEngine
 
@@ -84,6 +88,34 @@ class AnalysisTests(unittest.TestCase):
     def build_sample_report(self, seed="fixed", goblin_mode=False):
         service = AnalysisService(get_card_service(), RoastEngine())
         return service.build_report(self.sample_player(), self.sample_battles(), seed=seed, goblin_mode=goblin_mode)
+
+    def deck_with_anchor(self, anchor, index=0):
+        pool = [
+            "Knight",
+            "Musketeer",
+            "Cannon",
+            "Ice Spirit",
+            "Skeletons",
+            "The Log",
+            "Valkyrie",
+            "Hog Rider",
+            "Miner",
+            "Wall Breakers",
+            "Bomb Tower",
+            "Phoenix",
+            "Baby Dragon",
+            "Zap",
+            "Firecracker",
+            "Mini P.E.K.K.A",
+        ]
+        cards = [anchor]
+        cursor = index
+        while len(cards) < 8:
+            candidate = pool[cursor % len(pool)]
+            cursor += 1
+            if candidate not in cards:
+                cards.append(candidate)
+        return cards
 
     def test_player_tag_normalization(self):
         self.assertEqual(normalize_player_tag(" %23abc-123 "), "ABC123")
@@ -172,7 +204,19 @@ class AnalysisTests(unittest.TestCase):
     def test_report_has_new_sections_and_compatible_legacy_fields(self):
         report = self.build_sample_report()
         self.assertEqual(report["schema_version"], REPORT_SCHEMA_VERSION)
-        for key in ("fraud_score", "personality_report", "deck_personality", "roast_report", "roasts"):
+        for key in (
+            "fraud_score",
+            "personality_report",
+            "deck_personality",
+            "roast_report",
+            "roasts",
+            "favourite_card_analysis",
+            "feared_card_analysis",
+            "win_rate_verdict",
+            "roast_narrative",
+            "roast_modules",
+            "card_evidence_gallery",
+        ):
             self.assertIn(key, report)
 
         self.assertEqual(report["roast_report"]["troll_score"], report["fraud_score"]["score"])
@@ -180,6 +224,8 @@ class AnalysisTests(unittest.TestCase):
         self.assertTrue(report["fraud_score"]["contributors"])
         self.assertTrue(report["personality_report"]["scope_note"])
         self.assertTrue(report["deck_personality"]["plain_explanation"])
+        self.assertTrue(report["roast_narrative"]["opening_charge"])
+        self.assertTrue(any(module["category"] == "final_verdict" for module in report["roast_modules"]))
 
     def test_response_model_preserves_new_report_sections(self):
         serialized = ReportResponse.model_validate(self.build_sample_report()).model_dump()
@@ -187,6 +233,10 @@ class AnalysisTests(unittest.TestCase):
         self.assertIn("fraud_score", serialized)
         self.assertIn("personality_report", serialized)
         self.assertIn("deck_personality", serialized)
+        self.assertIn("favourite_card_analysis", serialized)
+        self.assertIn("feared_card_analysis", serialized)
+        self.assertIn("win_rate_verdict", serialized)
+        self.assertIn("card_evidence_gallery", serialized)
         self.assertIn("plain_language_explanation", serialized["roasts"][0])
 
     def test_report_has_no_duplicate_roast_rule_ids(self):
@@ -217,6 +267,12 @@ class AnalysisTests(unittest.TestCase):
         self.assertNotEqual(first_copy, second_copy)
 
     def test_template_catalog_has_multiple_variants_per_category(self):
+        counts = template_catalog_counts()
+        self.assertGreaterEqual(counts["favourite_card"], 8)
+        self.assertGreaterEqual(counts["feared_card"], 8)
+        self.assertGreaterEqual(counts["win_rate"], 8)
+        self.assertGreaterEqual(counts["insufficient_evidence"], 6)
+        self.assertGreaterEqual(counts["final_verdict"], 8)
         self.assertGreaterEqual(len(PERSONALITY_TEMPLATES), 30)
         self.assertGreaterEqual(len(GOBLIN_INTERVENTIONS), 5)
         for copy in TIER_COPY.values():
@@ -342,6 +398,93 @@ class AnalysisTests(unittest.TestCase):
     def test_card_icons_use_official_api_icon_urls_when_available(self):
         card = enrich_card({"name": "Mega Knight", "iconUrls": {"medium": "https://example.test/mega-knight.png"}})
         self.assertEqual(card["icon_url"], "https://example.test/mega-knight.png")
+
+    def test_missing_card_metadata_and_image_have_fallback_fields(self):
+        card = enrich_card({"name": "Mystery Soup"})
+        self.assertFalse(card["metadata_complete"])
+        self.assertIsNone(card["icon_url"])
+        self.assertEqual(card["type"], "unknown")
+
+    def test_favourite_card_uses_only_eligible_personal_history(self):
+        battles = []
+        for index in range(10):
+            battles.append({**battle(self.deck_with_anchor("Fireball", index), self.normal_opp, "win" if index % 2 else "loss"), "battleTime": f"20260630T12{index:02d}00.000Z"})
+        for index in range(8):
+            excluded = {**battle(self.deck_with_anchor("Hog Rider", index), self.opp, "win"), "type": "tripleDraft", "battleTime": f"20260630T13{index:02d}00.000Z"}
+            battles.append(excluded)
+        analysis = analyse_favourite_card(PLAYER_TAG, battles, {"current_deck": deck(self.deck_with_anchor("Fireball"))}, get_card_service())
+        self.assertTrue(analysis["is_true_single_card_favourite"])
+        self.assertEqual(analysis["favourite_card_name"], "Fireball")
+        self.assertEqual(analysis["eligible_match_count"], 10)
+
+    def test_true_one_deck_player_gets_no_fake_single_card_favourite(self):
+        battles = [{**battle(self.main, self.normal_opp, "win" if index % 2 else "loss"), "battleTime": f"20260630T12{index:02d}00.000Z"} for index in range(10)]
+        analysis = analyse_favourite_card(PLAYER_TAG, battles, {"current_deck": deck(self.main)}, get_card_service())
+        self.assertFalse(analysis["is_true_single_card_favourite"])
+        self.assertTrue(analysis["is_full_deck_loyalist_case"])
+        self.assertIsNone(analysis["favourite_card"])
+        self.assertIn("entire eight-card group chat", analysis["favourite_card_reason"])
+
+    def test_favourite_card_delta_uses_player_baseline(self):
+        battles = []
+        for index in range(12):
+            result = "win" if index < 8 else "loss"
+            battles.append({**battle(self.deck_with_anchor("Fireball", index), self.normal_opp, result), "battleTime": f"20260630T12{index:02d}00.000Z"})
+        for index in range(3):
+            battles.append({**battle(self.deck_with_anchor("Hog Rider", index), self.opp, "loss"), "battleTime": f"20260630T13{index:02d}00.000Z"})
+        analysis = analyse_favourite_card(PLAYER_TAG, battles, {"current_deck": deck(self.deck_with_anchor("Fireball"))}, get_card_service())
+        self.assertEqual(analysis["player_baseline_win_rate"], 53)
+        self.assertEqual(analysis["favourite_card_win_rate"], 67)
+        self.assertEqual(analysis["favourite_card_performance_delta"], 14)
+
+    def test_feared_card_requires_minimum_sample_size(self):
+        battles = []
+        for index in range(4):
+            battles.append({**battle(self.main, self.opp, "loss"), "battleTime": f"20260630T12{index:02d}00.000Z"})
+        for index in range(4):
+            battles.append({**battle(self.main, self.normal_opp, "win"), "battleTime": f"20260630T13{index:02d}00.000Z"})
+        analysis = analyse_feared_card(PLAYER_TAG, battles, get_card_service())
+        self.assertTrue(analysis["is_insufficient_evidence"])
+        self.assertEqual(analysis["games_against"], 4)
+
+    def test_feared_card_compares_against_baseline_loss_rate(self):
+        battles = []
+        for index in range(5):
+            result = "win" if index == 0 else "loss"
+            battles.append({**battle(self.main, self.opp, result), "battleTime": f"20260630T12{index:02d}00.000Z"})
+        for index in range(5):
+            result = "loss" if index == 0 else "win"
+            battles.append({**battle(self.main, self.normal_opp, result), "battleTime": f"20260630T13{index:02d}00.000Z"})
+        analysis = analyse_feared_card(PLAYER_TAG, battles, get_card_service())
+        self.assertFalse(analysis["is_insufficient_evidence"])
+        self.assertEqual(analysis["feared_card_name"], "Mega Knight")
+        self.assertEqual(analysis["baseline_loss_rate"], 50)
+        self.assertEqual(analysis["loss_rate_against"], 80)
+        self.assertEqual(analysis["excess_loss_rate"], 30)
+
+    def test_insufficient_samples_emit_limited_evidence_not_false_claims(self):
+        favourite = analyse_favourite_card(PLAYER_TAG, self.sample_battles(), {"current_deck": deck(self.main)}, get_card_service())
+        feared = analyse_feared_card(PLAYER_TAG, self.sample_battles(), get_card_service())
+        self.assertFalse(favourite["is_true_single_card_favourite"])
+        self.assertTrue(feared["is_insufficient_evidence"])
+        self.assertIn("needs at least", favourite["favourite_card_reason"])
+
+    def test_panic_roast_module_requires_strict_panic_classification(self):
+        report = self.build_sample_report()
+        self.assertNotEqual(report["behaviour_analysis"]["classification"], "PANIC_SWITCHER")
+        self.assertNotIn("panic_switching", {module["category"] for module in report["roast_modules"]})
+
+    def test_win_rate_verdict_uses_eligible_matches_only(self):
+        battles = [
+            {**battle(self.main, self.normal_opp, "win"), "battleTime": "20260630T120000.000Z"},
+            {**battle(self.main, self.normal_opp, "loss"), "battleTime": "20260630T120100.000Z"},
+            {**battle(self.main, self.normal_opp, "win"), "type": "tripleDraft", "battleTime": "20260630T120200.000Z"},
+        ]
+        behaviour = detect_panic_switching(PLAYER_TAG, battles)
+        verdict = analyse_win_rate_verdict(PLAYER_TAG, battles, behaviour)
+        self.assertEqual(verdict["total_eligible_matches"], 2)
+        self.assertEqual(verdict["wins"], 1)
+        self.assertEqual(verdict["losses"], 1)
 
     def test_builders_keep_mock_and_live_report_contract_compatible(self):
         selector = ExpressionSelector("contract")

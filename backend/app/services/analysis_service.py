@@ -8,6 +8,7 @@ from app.rules.deck_templates import DECK_STYLE_COPY, TRAIT_EXPLANATIONS
 from app.rules.expression_selector import ExpressionSelector
 from app.rules.fraud_score_templates import CONTRIBUTOR_COPY, TIER_COPY
 from app.rules.matchup_rules import label_opponent_core, most_common_loss_core
+from app.rules.roast_composer import compose_roast_system
 from app.services.battle_normalizer import (
     NormalizedBattle,
     cards_from_side,
@@ -17,6 +18,7 @@ from app.services.battle_normalizer import (
     eligible_personal_battles,
     material_deck_change,
     normalize_battles,
+    normalize_card_name,
     normalize_player_tag,
     same_or_minor_variation,
     shared_card_count,
@@ -25,7 +27,7 @@ from app.services.card_data_service import CardDataService, get_card_service
 from app.services.roast_engine import RoastEngine
 
 
-REPORT_SCHEMA_VERSION = "report-v3"
+REPORT_SCHEMA_VERSION = "report-v4"
 LEVEL_ADVANTAGE_THRESHOLD = 0.75
 
 
@@ -60,6 +62,25 @@ def enrich_card(card: dict[str, Any], card_service: CardDataService | None = Non
         "metadata_complete": bool(metadata.get("metadata_complete", False)),
         "icon_url": icon_urls.get("medium") or icon_urls.get("evolutionMedium"),
     }
+
+
+def card_details_from_battles(player_tag: str, name: str, battles: list[dict[str, Any]] | list[NormalizedBattle], card_service: CardDataService | None = None) -> dict[str, Any]:
+    service = card_service or get_card_service()
+    target = normalize_card_name(name)
+    for battle in reversed(as_normalized(player_tag, battles)):
+        for card in [*battle.player_deck, *battle.opponent_deck]:
+            if normalize_card_name(card.get("name", "")) == target:
+                return enrich_card(card, service)
+    return enrich_card({"name": name}, service)
+
+
+def card_details_from_player_context(player_tag: str, name: str, current_deck: list[dict[str, Any]], battles: list[dict[str, Any]] | list[NormalizedBattle], card_service: CardDataService | None = None) -> dict[str, Any]:
+    service = card_service or get_card_service()
+    target = normalize_card_name(name)
+    for card in current_deck:
+        if normalize_card_name(card.get("name", "")) == target:
+            return enrich_card(card, service)
+    return card_details_from_battles(player_tag, name, battles, service)
 
 
 def deck_signature(deck: list[dict[str, Any] | str]) -> str:
@@ -688,6 +709,312 @@ def analyse_main_character(player_tag: str, battles: list[dict[str, Any]] | list
     }
 
 
+def analyse_favourite_card(
+    player_tag: str,
+    battles: list[dict[str, Any]] | list[NormalizedBattle],
+    deck_analysis: dict[str, Any],
+    card_service: CardDataService,
+    min_games: int = 8,
+) -> dict[str, Any]:
+    normalized = as_normalized(player_tag, battles)
+    eligible = eligible_personal_battles(normalized)
+    total = len(eligible)
+    wins = sum(1 for battle in eligible if battle.result == "win")
+    baseline_win_rate = round(wins / total * 100) if total else 0
+    usage = sorted(
+        card_usage_stats(player_tag, eligible).values(),
+        key=lambda item: (item["used"], item["win_rate"], item["wins"]),
+        reverse=True,
+    )
+    evidence_base = [f"Eligible personal-deck matches: {total}", f"Player baseline win rate: {baseline_win_rate}%"]
+    if not usage:
+        return {
+            "detected": False,
+            "favourite_card": None,
+            "favourite_card_name": None,
+            "eligible_match_count": total,
+            "player_baseline_win_rate": baseline_win_rate,
+            "favourite_card_usage_count": 0,
+            "favourite_card_usage_rate": 0,
+            "favourite_card_win_rate": 0,
+            "favourite_card_performance_delta": 0,
+            "favourite_card_confidence": "low",
+            "favourite_card_reason": "No eligible personal-deck cards were found, so the report refuses to invent a favourite.",
+            "is_true_single_card_favourite": False,
+            "is_full_deck_loyalist_case": False,
+            "evidence": evidence_base,
+        }
+
+    top = usage[0]
+    top_count = top["used"]
+    second_count = usage[1]["used"] if len(usage) > 1 else 0
+    tied_top = [item for item in usage if item["used"] == top_count]
+    top_eight = usage[:8]
+    top_eight_spread = max((item["used"] for item in top_eight), default=0) - min((item["used"] for item in top_eight), default=0)
+    full_deck_loyalist = bool(len(tied_top) >= 6 or (len(top_eight) >= 8 and top_eight_spread <= 1 and top_count >= min_games))
+    usage_rate = round(top_count / total * 100) if total else 0
+    delta = top["win_rate"] - baseline_win_rate
+    common_evidence = [
+        *evidence_base,
+        f"Most-used card candidate: {top['card']} in {top_count} of {total} eligible matches ({usage_rate}%)",
+        f"Candidate win rate: {top['win_rate']}% versus baseline {baseline_win_rate}% ({delta:+d} percentage points)",
+        f"Second-most usage count: {second_count}",
+    ]
+
+    best_signature = None
+    best_candidates = [
+        stat
+        for stat in usage
+        if stat["used"] >= max(5, min_games - 3) and stat["win_rate"] >= baseline_win_rate + 8
+    ]
+    if best_candidates:
+        best = sorted(best_candidates, key=lambda item: (item["win_rate"] - baseline_win_rate, item["used"]), reverse=True)[0]
+        best_signature = {
+            "card_name": best["card"],
+            "card": card_details_from_player_context(player_tag, best["card"], deck_analysis.get("current_deck", []), normalized, card_service),
+            "used": best["used"],
+            "wins": best["wins"],
+            "losses": best["losses"],
+            "win_rate": best["win_rate"],
+            "delta": best["win_rate"] - baseline_win_rate,
+            "confidence": confidence_from_sample(best["used"], 5, 10),
+            "evidence": [
+                f"{best['card']} appeared in {best['used']} eligible matches",
+                f"Win rate with {best['card']}: {best['win_rate']}% versus baseline {baseline_win_rate}%",
+            ],
+        }
+
+    if total < min_games:
+        return {
+            "detected": False,
+            "favourite_card": None,
+            "favourite_card_name": top["card"],
+            "eligible_match_count": total,
+            "player_baseline_win_rate": baseline_win_rate,
+            "favourite_card_usage_count": top_count,
+            "favourite_card_usage_rate": usage_rate,
+            "favourite_card_win_rate": top["win_rate"],
+            "favourite_card_performance_delta": delta,
+            "favourite_card_confidence": "low",
+            "favourite_card_reason": f"Only {total} eligible personal-deck matches; a strong favourite-card roast needs at least {min_games}.",
+            "is_true_single_card_favourite": False,
+            "is_full_deck_loyalist_case": False,
+            "best_signature_card": best_signature,
+            "evidence": common_evidence,
+        }
+
+    if full_deck_loyalist:
+        return {
+            "detected": False,
+            "favourite_card": None,
+            "favourite_card_name": None,
+            "eligible_match_count": total,
+            "player_baseline_win_rate": baseline_win_rate,
+            "favourite_card_usage_count": top_count,
+            "favourite_card_usage_rate": usage_rate,
+            "favourite_card_win_rate": top["win_rate"],
+            "favourite_card_performance_delta": delta,
+            "favourite_card_confidence": "medium",
+            "favourite_card_reason": "No single main character detected. This player is committed to the entire eight-card group chat.",
+            "is_true_single_card_favourite": False,
+            "is_full_deck_loyalist_case": True,
+            "best_signature_card": best_signature,
+            "evidence": [
+                *common_evidence,
+                f"{len(tied_top)} cards tied for top usage" if len(tied_top) >= 6 else f"Top eight card usage spread is only {top_eight_spread} match",
+            ],
+        }
+
+    meaningful_single_card = top_count >= min_games and usage_rate >= 45 and (top_count > second_count or usage_rate >= 75)
+    if not meaningful_single_card:
+        return {
+            "detected": False,
+            "favourite_card": None,
+            "favourite_card_name": top["card"],
+            "eligible_match_count": total,
+            "player_baseline_win_rate": baseline_win_rate,
+            "favourite_card_usage_count": top_count,
+            "favourite_card_usage_rate": usage_rate,
+            "favourite_card_win_rate": top["win_rate"],
+            "favourite_card_performance_delta": delta,
+            "favourite_card_confidence": "low",
+            "favourite_card_reason": "Top card usage did not separate enough from the rest of the deck to frame a true single-card favourite.",
+            "is_true_single_card_favourite": False,
+            "is_full_deck_loyalist_case": False,
+            "best_signature_card": best_signature,
+            "evidence": common_evidence,
+        }
+
+    if delta >= 10:
+        reason = f"{top['card']} is a high-usage card performing above baseline by {delta:+d} percentage points."
+    elif delta <= -10:
+        reason = f"{top['card']} is a high-usage card performing below baseline by {delta:+d} percentage points."
+    else:
+        reason = f"{top['card']} is a high-usage card with results close to baseline."
+
+    return {
+        "detected": True,
+        "favourite_card": card_details_from_player_context(player_tag, top["card"], deck_analysis.get("current_deck", []), normalized, card_service),
+        "favourite_card_name": top["card"],
+        "favourite_card_usage_count": top_count,
+        "favourite_card_usage_rate": usage_rate,
+        "favourite_card_win_rate": top["win_rate"],
+        "player_baseline_win_rate": baseline_win_rate,
+        "favourite_card_performance_delta": delta,
+        "favourite_card_confidence": confidence_from_sample(top_count, min_games, min_games + 4),
+        "favourite_card_reason": reason,
+        "is_true_single_card_favourite": True,
+        "is_full_deck_loyalist_case": False,
+        "eligible_match_count": total,
+        "best_signature_card": best_signature,
+        "evidence": common_evidence,
+    }
+
+
+def analyse_feared_card(
+    player_tag: str,
+    battles: list[dict[str, Any]] | list[NormalizedBattle],
+    card_service: CardDataService,
+    min_encounters: int = 5,
+) -> dict[str, Any]:
+    normalized = as_normalized(player_tag, battles)
+    eligible = eligible_personal_battles(normalized)
+    ranked = rank_traumatic_opponent_cards(player_tag, eligible, min_encounters=min_encounters)
+    baseline_loss_rate = round(sum(1 for battle in eligible if battle.result == "loss") / len(eligible) * 100) if eligible else 0
+    base = {
+        "feared_card": None,
+        "feared_card_name": None,
+        "feared_card_image": None,
+        "games_against": 0,
+        "wins_against": 0,
+        "losses_against": 0,
+        "loss_rate_against": 0,
+        "baseline_loss_rate": baseline_loss_rate,
+        "excess_loss_rate": 0,
+        "feared_card_confidence": "low",
+        "evidence_summary": f"Need at least {min_encounters} eligible encounters and an above-baseline loss rate before naming a feared card.",
+        "is_insufficient_evidence": True,
+        "evidence": [f"Eligible personal-deck matches: {len(eligible)}", f"Baseline loss rate: {baseline_loss_rate}%"],
+    }
+    if not ranked:
+        return base
+
+    leading = ranked[0]
+    leading_card = card_details_from_battles(player_tag, leading["card"], normalized, card_service)
+    sufficient = next((item for item in ranked if item["faced"] >= min_encounters and item["excess_loss_rate"] > 0), None)
+    if not sufficient:
+        reason = (
+            f"The court cannot confirm that {leading['card']} owns you yet. "
+            f"It appeared in {leading['faced']} eligible matches with {leading['excess_loss_rate']:+d} pp excess loss rate."
+        )
+        return {
+            **base,
+            "leading_candidate": leading_card,
+            "leading_candidate_name": leading["card"],
+            "games_against": leading["faced"],
+            "wins_against": leading["wins"],
+            "losses_against": leading["losses"],
+            "loss_rate_against": leading["loss_rate"],
+            "excess_loss_rate": leading["excess_loss_rate"],
+            "evidence_summary": reason,
+            "evidence": [
+                *base["evidence"],
+                *leading.get("evidence", []),
+                f"Minimum encounters for a feared-card claim: {min_encounters}",
+            ],
+        }
+
+    card = card_details_from_battles(player_tag, sufficient["card"], normalized, card_service)
+    return {
+        "feared_card": card,
+        "feared_card_name": sufficient["card"],
+        "feared_card_image": card.get("icon_url"),
+        "games_against": sufficient["faced"],
+        "wins_against": sufficient["wins"],
+        "losses_against": sufficient["losses"],
+        "loss_rate_against": sufficient["loss_rate"],
+        "baseline_loss_rate": sufficient["baseline_loss_rate"],
+        "excess_loss_rate": sufficient["excess_loss_rate"],
+        "feared_card_confidence": sufficient["confidence"],
+        "evidence_summary": (
+            f"{sufficient['card']} appeared in {sufficient['faced']} eligible matches; "
+            f"loss rate was {sufficient['loss_rate']}% versus {sufficient['baseline_loss_rate']}% baseline."
+        ),
+        "is_insufficient_evidence": False,
+        "evidence": [
+            *sufficient.get("evidence", []),
+            "This is a detected recurring problem, not a hard-counter claim.",
+        ],
+    }
+
+
+def analyse_win_rate_verdict(
+    player_tag: str,
+    battles: list[dict[str, Any]] | list[NormalizedBattle],
+    behaviour_analysis: dict[str, Any],
+) -> dict[str, Any]:
+    eligible = eligible_personal_battles(as_normalized(player_tag, battles))
+    total = len(eligible)
+    wins = sum(1 for battle in eligible if battle.result == "win")
+    losses = sum(1 for battle in eligible if battle.result == "loss")
+    draws = sum(1 for battle in eligible if battle.result == "draw")
+    win_rate = round(wins / total * 100) if total else 0
+    loss_rate = round(losses / total * 100) if total else 0
+    close_wins = sum(1 for battle in eligible if battle.result == "win" and battle.player_crowns - battle.opponent_crowns == 1)
+    close_losses = sum(1 for battle in eligible if battle.result == "loss" and battle.opponent_crowns - battle.player_crowns == 1)
+    close_total = close_wins + close_losses
+    close_game_win_rate = round(close_wins / close_total * 100) if close_total else None
+    trend = "insufficient chronological data"
+    trend_delta = 0
+    if total >= 10:
+        midpoint = total // 2
+        older = eligible[:midpoint]
+        newer = eligible[midpoint:]
+        older_rate = round(sum(1 for battle in older if battle.result == "win") / len(older) * 100) if older else 0
+        newer_rate = round(sum(1 for battle in newer if battle.result == "win") / len(newer) * 100) if newer else 0
+        trend_delta = newer_rate - older_rate
+        if trend_delta >= 12:
+            trend = "improving"
+        elif trend_delta <= -12:
+            trend = "declining"
+        else:
+            trend = "stable"
+
+    evidence = [
+        f"Eligible personal-deck matches: {total}",
+        f"Wins/losses/draws: {wins}/{losses}/{draws}",
+        f"Eligible win rate: {win_rate}%",
+    ]
+    if close_game_win_rate is not None:
+        evidence.append(f"Close-game win rate: {close_game_win_rate}% from {close_total} close games")
+    if behaviour_analysis.get("main_deck_games", 0):
+        evidence.append(f"Main deck win rate: {behaviour_analysis.get('main_deck_win_rate', 0)}% over {behaviour_analysis.get('main_deck_games', 0)} games")
+    if behaviour_analysis.get("emergency_deck_games", 0):
+        evidence.append(f"Replacement deck win rate: {behaviour_analysis.get('emergency_deck_win_rate', 0)}% over {behaviour_analysis.get('emergency_deck_games', 0)} games")
+    if total >= 10:
+        evidence.append(f"Recent-half trend delta: {trend_delta:+d} percentage points")
+
+    return {
+        "total_eligible_matches": total,
+        "wins": wins,
+        "losses": losses,
+        "draws": draws,
+        "win_rate": win_rate,
+        "loss_rate": loss_rate,
+        "close_wins": close_wins,
+        "close_losses": close_losses,
+        "close_game_win_rate": close_game_win_rate,
+        "main_deck_win_rate": behaviour_analysis.get("main_deck_win_rate"),
+        "main_deck_games": behaviour_analysis.get("main_deck_games"),
+        "replacement_deck_win_rate": behaviour_analysis.get("emergency_deck_win_rate"),
+        "replacement_deck_games": behaviour_analysis.get("emergency_deck_games"),
+        "confidence": confidence_from_sample(total, 8, 15),
+        "trend": trend,
+        "trend_delta": trend_delta,
+        "evidence": evidence,
+    }
+
+
 def analyse_clutch(summary: dict[str, Any]) -> dict[str, Any]:
     close_wins = summary["close_wins"]
     close_losses = summary["close_losses"]
@@ -1027,13 +1354,43 @@ class AnalysisService:
         level_analysis = detect_level_analysis(player_tag, normalized)
         behaviour_analysis = detect_panic_switching(player_tag, normalized)
         emotional_support = detect_emotional_support_card(player_tag, normalized)
+        if emotional_support.get("detected"):
+            emotional_support = {
+                **emotional_support,
+                "card_details": card_details_from_player_context(
+                    player_tag,
+                    emotional_support["card"],
+                    deck_analysis.get("current_deck", []),
+                    normalized,
+                    self.card_service,
+                ),
+            }
         main_character = analyse_main_character(player_tag, normalized)
         clutch_analysis = analyse_clutch(battle_summary)
         divorce = recommend_deck_divorce(player_tag, normalized, deck_analysis["current_deck"])
+        favourite_card_analysis = analyse_favourite_card(player_tag, normalized, deck_analysis, self.card_service)
+        feared_card_analysis = analyse_feared_card(player_tag, normalized, self.card_service)
+        win_rate_verdict = analyse_win_rate_verdict(player_tag, normalized, behaviour_analysis)
         troll_score = calculate_troll_score(battle_summary, deck_analysis, matchup_analysis, level_analysis, behaviour_analysis, emotional_support, clutch_analysis)
         fraud_score = build_fraud_score(troll_score, battle_summary, deck_analysis, matchup_analysis, level_analysis, behaviour_analysis, emotional_support, clutch_analysis, selector)
         deck_personality = build_deck_personality(deck_analysis, selector)
         personality_report = build_personality_report(deck_analysis, battle_summary, matchup_analysis, level_analysis, behaviour_analysis, emotional_support, main_character, fraud_score, selector, goblin_mode)
+        roast_system = compose_roast_system(
+            favourite_card_analysis=favourite_card_analysis,
+            feared_card_analysis=feared_card_analysis,
+            win_rate_verdict=win_rate_verdict,
+            deck_analysis=deck_analysis,
+            deck_personality=deck_personality,
+            behaviour_analysis=behaviour_analysis,
+            matchup_analysis=matchup_analysis,
+            level_analysis=level_analysis,
+            emotional_support=emotional_support,
+            fraud_score=fraud_score,
+            selector=selector,
+        )
+        favourite_card_analysis = roast_system["favourite_card_analysis"]
+        feared_card_analysis = roast_system["feared_card_analysis"]
+        win_rate_verdict = roast_system["win_rate_verdict"]
 
         roasts = [
             self.roast_engine.render(
@@ -1087,7 +1444,8 @@ class AnalysisService:
 
         roasts = dedupe_roasts(roasts)
         headline_roast = roasts[0] if roasts else {"evidence": []}
-        title = f"{personality_report['title']} - {fraud_score['tier']}".strip()
+        narrative = roast_system["roast_narrative"]
+        title = narrative.get("final_title") or f"{personality_report['title']} - {fraud_score['tier']}".strip()
         return {
             "schema_version": REPORT_SCHEMA_VERSION,
             "player_summary": {
@@ -1107,14 +1465,20 @@ class AnalysisService:
             "behaviour_analysis": behaviour_analysis,
             "clutch_analysis": clutch_analysis,
             "divorce_recommendation": divorce,
+            "favourite_card_analysis": favourite_card_analysis,
+            "feared_card_analysis": feared_card_analysis,
+            "win_rate_verdict": win_rate_verdict,
+            "roast_narrative": narrative,
+            "roast_modules": roast_system["roast_modules"],
+            "card_evidence_gallery": roast_system["card_evidence_gallery"],
             "fraud_score": fraud_score,
             "personality_report": personality_report,
             "roast_report": {
                 "title": title,
                 "troll_score": fraud_score["score"],
                 "score_label": fraud_score["tier"],
-                "headline_roast": fraud_score["headline_roast"],
-                "evidence": fraud_score["score_receipts"] or headline_roast["evidence"],
+                "headline_roast": narrative.get("opening_charge") or fraud_score["headline_roast"],
+                "evidence": fraud_score["score_receipts"] or narrative.get("opening_evidence") or headline_roast["evidence"],
                 "score_breakdown": fraud_score["contributors"],
             },
             "roasts": roasts,

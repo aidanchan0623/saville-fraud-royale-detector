@@ -3,8 +3,12 @@ import { motion } from "framer-motion";
 import {
   BadgeAlert,
   Copy,
+  Crosshair,
   Crown,
   Download,
+  Flame,
+  Gauge,
+  ImageOff,
   ReceiptText,
   RotateCcw,
   Search,
@@ -26,7 +30,7 @@ import {
   YAxis,
 } from "recharts";
 import { getDemoVictims, getReport } from "./lib/api";
-import type { Card, DemoVictim, Report, Roast } from "./types";
+import type { Card, CardEvidenceGalleryItem, DemoVictim, GalleryStat, Report, Roast, RoastModule } from "./types";
 
 function safeArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
@@ -133,6 +137,120 @@ function Metric({ label, value, tone = "blue" }: { label: string; value: string 
   );
 }
 
+function cardIconUrl(card?: Card | null) {
+  return card?.icon_url ?? card?.iconUrls?.medium ?? card?.iconUrls?.evolutionMedium ?? "";
+}
+
+function cardDisplayName(card?: Card | null, fallback = "Unknown card") {
+  return card?.name || fallback || "Unknown card";
+}
+
+function StatChip({ stat }: { stat: GalleryStat }) {
+  const tones = {
+    blue: "border-blue-300/25 bg-blue-400/10 text-blue-50",
+    gold: "border-amber-300/25 bg-amber-300/10 text-amber-50",
+    red: "border-rose-300/25 bg-rose-400/10 text-rose-50",
+    green: "border-emerald-300/25 bg-emerald-300/10 text-emerald-50",
+  };
+  const tone = stat.tone ?? "blue";
+  return (
+    <div className={`rounded-lg border px-3 py-2 ${tones[tone]}`}>
+      <div className="text-[10px] font-black uppercase text-white/50">{stat.label}</div>
+      <div className="mt-1 text-sm font-black text-white">{stat.value ?? "N/A"}</div>
+    </div>
+  );
+}
+
+function CardArtwork({ card, fallbackName, large = false }: { card?: Card | null; fallbackName?: string | null; large?: boolean }) {
+  const name = cardDisplayName(card, fallbackName ?? "Card");
+  const iconUrl = cardIconUrl(card);
+  const sizeClass = large ? "h-32 w-32 sm:h-36 sm:w-36" : "h-16 w-16";
+  if (iconUrl) {
+    return <img src={iconUrl} alt="" className={`${sizeClass} shrink-0 rounded-lg object-contain`} loading="lazy" />;
+  }
+  return (
+    <div className={`${sizeClass} flex shrink-0 flex-col items-center justify-center rounded-lg border border-amber-300/25 bg-amber-300/10 text-center text-amber-100`}>
+      <ImageOff size={large ? 28 : 18} />
+      <div className={`${large ? "mt-2 text-sm" : "mt-1 text-[10px]"} font-black`}>{initials(name) || "CARD"}</div>
+    </div>
+  );
+}
+
+function CardEvidenceTile({ item, featured = false }: { item: CardEvidenceGalleryItem; featured?: boolean }) {
+  const card = item.card ?? undefined;
+  const name = cardDisplayName(card, item.card_name ?? item.title);
+  const stats = safeArray<GalleryStat>(item.stats);
+  return (
+    <article className={`rounded-lg border border-white/10 bg-slate-950/70 p-5 ${featured ? "min-h-[23rem]" : ""}`}>
+      <div className={`flex gap-4 ${featured ? "items-start" : "items-center"}`}>
+        <CardArtwork card={card} fallbackName={name} large={featured} />
+        <div className="min-w-0 flex-1">
+          <div className="text-xs font-black uppercase text-amber-200">{item.title}</div>
+          <h3 className={`${featured ? "text-3xl" : "text-xl"} mt-1 break-words font-black uppercase leading-tight text-white`}>{name}</h3>
+          <div className="mt-2 flex flex-wrap gap-1">
+            {(card?.traits ?? []).slice(0, 4).map((trait) => (
+              <span key={trait} className="rounded-md border border-sky-300/20 bg-sky-400/10 px-2 py-1 text-[10px] font-black uppercase text-sky-100">
+                {trait.replace(/_/g, " ")}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+      <p className="mt-4 text-base font-black leading-7 text-amber-50">"{item.roast}"</p>
+      {stats.length > 0 && (
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          {stats.map((stat) => <StatChip key={`${item.id}-${stat.label}`} stat={stat} />)}
+        </div>
+      )}
+      <Evidence evidence={safeArray<string>(item.evidence)} />
+    </article>
+  );
+}
+
+function WinRateVerdictPanel({ report }: { report: Report }) {
+  const verdict = report.win_rate_verdict;
+  const closeRate = verdict.close_game_win_rate === null || verdict.close_game_win_rate === undefined ? "N/A" : `${verdict.close_game_win_rate}%`;
+  return (
+    <div className="rounded-lg border border-white/10 bg-white/5 p-5">
+      <div className="grid gap-5 lg:grid-cols-[.8fr_1.2fr]">
+        <div>
+          <div className="text-xs font-black uppercase text-emerald-200">Win Rate Verdict</div>
+          <div className="mt-2 text-7xl font-black leading-none text-white">{verdict.win_rate}<span className="text-2xl text-white/50">%</span></div>
+          <p className="mt-4 text-xl font-black leading-8 text-amber-50">"{verdict.roast ?? "Eligible win-rate verdict unavailable."}"</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Metric label="Eligible Matches" value={verdict.total_eligible_matches} tone="blue" />
+          <Metric label="W-L-D" value={`${verdict.wins}-${verdict.losses}-${verdict.draws}`} tone="gold" />
+          <Metric label="Close WR" value={closeRate} tone="green" />
+          <Metric label="Trend" value={verdict.trend} tone={verdict.trend === "declining" ? "red" : verdict.trend === "improving" ? "green" : "blue"} />
+          <Metric label="Main Deck WR" value={verdict.main_deck_win_rate === null || verdict.main_deck_win_rate === undefined ? "N/A" : `${verdict.main_deck_win_rate}%`} tone="blue" />
+          <Metric label="Replacement WR" value={verdict.replacement_deck_games ? `${verdict.replacement_deck_win_rate}%` : "N/A"} tone="red" />
+        </div>
+      </div>
+      <Evidence evidence={safeArray<string>(verdict.evidence)} />
+    </div>
+  );
+}
+
+function RoastModuleList({ modules }: { modules: RoastModule[] }) {
+  const visible = safeArray<RoastModule>(modules).slice(0, 8);
+  if (!visible.length) return null;
+  return (
+    <div className="grid gap-3 lg:grid-cols-2">
+      {visible.map((item) => (
+        <article key={item.id} className="rounded-lg border border-white/10 bg-slate-950/60 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-xs font-black uppercase text-sky-100">{item.category.replace(/_/g, " ")}</div>
+            <div className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-black uppercase text-white/55">{item.confidence}</div>
+          </div>
+          <h3 className="mt-2 text-lg font-black uppercase text-white">{item.title}</h3>
+          <p className="mt-2 text-sm font-semibold leading-6 text-white/70">{item.text}</p>
+        </article>
+      ))}
+    </div>
+  );
+}
+
 function Section({ title, icon, children }: { title: string; icon: ReactNode; children: ReactNode }) {
   return (
     <section className="mx-auto w-full max-w-7xl px-4 py-7 sm:px-6 lg:px-8">
@@ -147,7 +265,8 @@ function Section({ title, icon, children }: { title: string; icon: ReactNode; ch
 
 function CardToken({ card }: { card: Card | string }) {
   const name = typeof card === "string" ? card : card.name;
-  const iconUrl = typeof card === "string" ? "" : card.icon_url ?? card.iconUrls?.medium ?? "";
+  const iconUrl = typeof card === "string" ? "" : cardIconUrl(card);
+  const details = typeof card === "string" ? [] : [card.elixir !== null && card.elixir !== undefined ? `${card.elixir} elixir` : null, card.type || "unknown"].filter(Boolean);
   return (
     <div className="flex min-w-0 items-center gap-3 rounded-lg border border-white/10 bg-slate-950/55 p-2.5">
       {iconUrl ? (
@@ -159,11 +278,11 @@ function CardToken({ card }: { card: Card | string }) {
       )}
       <div className="min-w-0">
         <div className="truncate text-sm font-extrabold text-white">{name}</div>
-        {typeof card !== "string" && (
+        {details.length > 0 && (
           <div className="mt-1 flex flex-wrap gap-1 text-[11px] font-bold uppercase text-white/55">
-            <span>{card.elixir} elixir</span>
-            <span>-</span>
-            <span>{card.type}</span>
+            {details.map((detail, index) => (
+              <span key={String(detail)}>{index > 0 ? "- " : ""}{detail}</span>
+            ))}
           </div>
         )}
       </div>
@@ -420,6 +539,75 @@ const DEFAULT_REPORT: Report = {
     three_crown_wins: 0,
   },
   divorce_recommendation: {},
+  favourite_card_analysis: {
+    detected: false,
+    favourite_card: null,
+    favourite_card_name: null,
+    favourite_card_usage_count: 0,
+    favourite_card_usage_rate: 0,
+    favourite_card_win_rate: 0,
+    player_baseline_win_rate: 0,
+    favourite_card_performance_delta: 0,
+    favourite_card_confidence: "low",
+    favourite_card_reason: "Favourite-card evidence unavailable.",
+    is_true_single_card_favourite: false,
+    is_full_deck_loyalist_case: false,
+    eligible_match_count: 0,
+    roast: "No favourite-card indictment available.",
+    evidence: [],
+  },
+  feared_card_analysis: {
+    feared_card: null,
+    feared_card_name: null,
+    feared_card_image: null,
+    leading_candidate: null,
+    leading_candidate_name: null,
+    games_against: 0,
+    wins_against: 0,
+    losses_against: 0,
+    loss_rate_against: 0,
+    baseline_loss_rate: 0,
+    excess_loss_rate: 0,
+    feared_card_confidence: "low",
+    evidence_summary: "No feared-card evidence available.",
+    is_insufficient_evidence: true,
+    roast: "No confirmed natural predator.",
+    evidence: [],
+  },
+  win_rate_verdict: {
+    total_eligible_matches: 0,
+    wins: 0,
+    losses: 0,
+    draws: 0,
+    win_rate: 0,
+    loss_rate: 0,
+    close_wins: 0,
+    close_losses: 0,
+    close_game_win_rate: null,
+    main_deck_win_rate: null,
+    main_deck_games: null,
+    replacement_deck_win_rate: null,
+    replacement_deck_games: null,
+    confidence: "low",
+    trend: "insufficient chronological data",
+    trend_delta: 0,
+    band: "insufficient",
+    roast: "Only 0 eligible matches. Not enough evidence to roast responsibly.",
+    evidence: [],
+  },
+  roast_narrative: {
+    opening_charge: "Opening charge: the report payload was incomplete, so the court is staying careful.",
+    opening_evidence: [],
+    favourite_card_indictment: "No favourite-card indictment available.",
+    feared_card_trauma: "No feared-card trauma report available.",
+    win_rate_verdict: "No win-rate verdict available.",
+    deck_personality: "No deck personality available.",
+    final_title: "Evidence Insufficient",
+    final_verdict: "No conviction due to missing report sections.",
+    arc: [],
+  },
+  roast_modules: [],
+  card_evidence_gallery: [],
   fraud_score: {
     score: 0,
     tier: "Evidence Insufficient",
@@ -468,6 +656,75 @@ function normalizeRoast(roast: unknown): Roast {
   };
 }
 
+function normalizeConfidence(value: unknown): "low" | "medium" | "high" {
+  return value === "high" || value === "medium" ? value : "low";
+}
+
+function normalizeCard(value: unknown): Card | null {
+  if (!isRecord(value)) return null;
+  const name = typeof value.name === "string" ? value.name : "";
+  if (!name) return null;
+  const iconUrls = isRecord(value.iconUrls) ? value.iconUrls : {};
+  return {
+    ...(value as Record<string, unknown>),
+    name,
+    level: typeof value.level === "number" ? value.level : null,
+    elixir: typeof value.elixir === "number" ? value.elixir : null,
+    type: typeof value.type === "string" ? value.type : "unknown",
+    rarity: typeof value.rarity === "string" ? value.rarity : "common",
+    traits: safeArray<string>(value.traits),
+    icon_url: typeof value.icon_url === "string" ? value.icon_url : null,
+    iconUrls: {
+      medium: typeof iconUrls.medium === "string" ? iconUrls.medium : undefined,
+      evolutionMedium: typeof iconUrls.evolutionMedium === "string" ? iconUrls.evolutionMedium : undefined,
+    },
+  };
+}
+
+function normalizeGalleryStat(value: unknown): GalleryStat {
+  const item = isRecord(value) ? value : {};
+  const tone = item.tone === "gold" || item.tone === "red" || item.tone === "green" ? item.tone : "blue";
+  return {
+    label: String(item.label ?? "Stat"),
+    value: typeof item.value === "number" || typeof item.value === "string" ? item.value : "N/A",
+    tone,
+  };
+}
+
+function normalizeGalleryItem(value: unknown): CardEvidenceGalleryItem {
+  const item = isRecord(value) ? value : {};
+  const card = normalizeCard(item.card);
+  return {
+    id: String(item.id ?? item.category ?? "card-evidence"),
+    category: String(item.category ?? "evidence"),
+    title: String(item.title ?? "Card Evidence"),
+    card,
+    card_name: typeof item.card_name === "string" ? item.card_name : card?.name ?? "Evidence",
+    roast: String(item.roast ?? "Evidence unavailable."),
+    stats: safeArray<unknown>(item.stats).map(normalizeGalleryStat),
+    evidence: safeArray<string>(item.evidence),
+    confidence: normalizeConfidence(item.confidence),
+  };
+}
+
+function normalizeRoastModule(value: unknown): RoastModule {
+  const item = isRecord(value) ? value : {};
+  return {
+    id: String(item.id ?? item.category ?? "roast-module"),
+    category: String(item.category ?? "evidence"),
+    title: String(item.title ?? "Evidence Module"),
+    text: String(item.text ?? "No module text was provided."),
+    confidence: normalizeConfidence(item.confidence),
+    confidence_requirement: typeof item.confidence_requirement === "string" ? item.confidence_requirement : undefined,
+    severity: String(item.severity ?? "playful"),
+    eligibility_conditions: safeArray<string>(item.eligibility_conditions),
+    required_evidence: safeArray<string>(item.required_evidence),
+    evidence: safeArray<string>(item.evidence),
+    linked_cards: safeArray<unknown>(item.linked_cards).map(normalizeCard).filter((card): card is Card => Boolean(card)),
+    score_impact: typeof item.score_impact === "string" ? item.score_impact : undefined,
+  };
+}
+
 function withReportDefaults(rawReport: unknown): Report {
   const raw = isRecord(rawReport) ? rawReport : {};
   const player = isRecord(raw.player_summary) ? raw.player_summary : {};
@@ -485,6 +742,10 @@ function withReportDefaults(rawReport: unknown): Report {
   const fraud = isRecord(raw.fraud_score) ? raw.fraud_score : {};
   const personality = isRecord(raw.personality_report) ? raw.personality_report : {};
   const roastReport = isRecord(raw.roast_report) ? raw.roast_report : {};
+  const favourite = isRecord(raw.favourite_card_analysis) ? raw.favourite_card_analysis : {};
+  const feared = isRecord(raw.feared_card_analysis) ? raw.feared_card_analysis : {};
+  const winRate = isRecord(raw.win_rate_verdict) ? raw.win_rate_verdict : {};
+  const narrative = isRecord(raw.roast_narrative) ? raw.roast_narrative : {};
 
   const normalized: Report = {
     ...DEFAULT_REPORT,
@@ -535,6 +796,38 @@ function withReportDefaults(rawReport: unknown): Report {
     },
     clutch_analysis: { ...DEFAULT_REPORT.clutch_analysis, ...clutch },
     divorce_recommendation: isRecord(raw.divorce_recommendation) ? raw.divorce_recommendation : {},
+    favourite_card_analysis: {
+      ...DEFAULT_REPORT.favourite_card_analysis,
+      ...favourite,
+      favourite_card: normalizeCard(favourite.favourite_card),
+      favourite_card_name: typeof favourite.favourite_card_name === "string" ? favourite.favourite_card_name : null,
+      favourite_card_confidence: normalizeConfidence(favourite.favourite_card_confidence),
+      evidence: safeArray<string>(favourite.evidence),
+    },
+    feared_card_analysis: {
+      ...DEFAULT_REPORT.feared_card_analysis,
+      ...feared,
+      feared_card: normalizeCard(feared.feared_card),
+      leading_candidate: normalizeCard(feared.leading_candidate),
+      feared_card_name: typeof feared.feared_card_name === "string" ? feared.feared_card_name : null,
+      leading_candidate_name: typeof feared.leading_candidate_name === "string" ? feared.leading_candidate_name : null,
+      feared_card_confidence: normalizeConfidence(feared.feared_card_confidence),
+      evidence: safeArray<string>(feared.evidence),
+    },
+    win_rate_verdict: {
+      ...DEFAULT_REPORT.win_rate_verdict,
+      ...winRate,
+      confidence: normalizeConfidence(winRate.confidence),
+      evidence: safeArray<string>(winRate.evidence),
+    },
+    roast_narrative: {
+      ...DEFAULT_REPORT.roast_narrative,
+      ...narrative,
+      opening_evidence: safeArray<string>(narrative.opening_evidence),
+      arc: safeArray<string>(narrative.arc),
+    },
+    roast_modules: safeArray<unknown>(raw.roast_modules).map(normalizeRoastModule),
+    card_evidence_gallery: safeArray<unknown>(raw.card_evidence_gallery).map(normalizeGalleryItem),
     fraud_score: {
       ...DEFAULT_REPORT.fraud_score,
       ...fraud,
@@ -641,6 +934,9 @@ function ReportDashboard({ report: rawReport, onReset }: { report: Report; onRes
     cards: report.deck_analysis.most_common_deck.cards,
     uses: report.deck_analysis.most_common_deck.uses,
   };
+  const galleryItems = report.card_evidence_gallery;
+  const featuredGallery = galleryItems.filter((item) => ["favourite_card", "feared_card"].includes(item.category)).slice(0, 2);
+  const remainingGallery = galleryItems.filter((item) => !featuredGallery.some((featured) => featured.id === item.id));
   const eligibleHistory = report.deck_analysis.eligible_battle_history ?? {
     eligible_matches: report.battle_summary.eligible_battles ?? report.battle_summary.battles_analysed,
     excluded_matches: report.battle_summary.excluded_battles ?? 0,
@@ -675,10 +971,10 @@ function ReportDashboard({ report: rawReport, onReset }: { report: Report; onRes
 
           <div className="mt-8 grid gap-6 lg:grid-cols-[.95fr_1.05fr]">
             <div className="rounded-lg border border-white/10 bg-slate-950/70 p-5">
-              <div className="text-xs font-black uppercase text-white/50">Verdict</div>
-              <h2 className="mt-2 text-3xl font-black uppercase leading-tight text-white">{report.personality_report.title}</h2>
-              <p className="mt-4 text-lg font-semibold leading-8 text-white/80">{report.personality_report.summary}</p>
-              <Evidence evidence={report.personality_report.evidence} />
+              <div className="text-xs font-black uppercase text-white/50">Opening Charge</div>
+              <h2 className="mt-2 text-3xl font-black uppercase leading-tight text-white">{report.roast_narrative.final_title}</h2>
+              <p className="mt-4 text-lg font-semibold leading-8 text-white/80">{report.roast_narrative.opening_charge}</p>
+              <Evidence evidence={report.roast_narrative.opening_evidence} />
             </div>
 
             <div className="rounded-lg border border-amber-300/30 bg-slate-950/80 p-6 shadow-glow">
@@ -697,7 +993,7 @@ function ReportDashboard({ report: rawReport, onReset }: { report: Report; onRes
               </div>
               <h3 className="mt-5 text-3xl font-black uppercase text-white">{report.fraud_score.tier}</h3>
               <p className="mt-2 text-sm font-semibold leading-6 text-white/70">{report.fraud_score.tier_description}</p>
-              <p className="mt-4 text-xl font-black leading-8 text-amber-100">"{report.fraud_score.headline_roast}"</p>
+              <p className="mt-4 text-xl font-black leading-8 text-amber-100">"{report.roast_narrative.final_verdict || report.fraud_score.headline_roast}"</p>
               <div className="mt-5 space-y-3">
                 {report.fraud_score.contributors.slice(0, 5).map((item) => (
                   <div key={item.label} className="rounded-lg border border-white/10 bg-white/5 p-3">
@@ -727,6 +1023,34 @@ function ReportDashboard({ report: rawReport, onReset }: { report: Report; onRes
           </div>
         </div>
       </section>
+
+      <Section title="Card Evidence Gallery" icon={<Flame size={20} />}>
+        {galleryItems.length ? (
+          <div className="space-y-5">
+            {featuredGallery.length > 0 && (
+              <div className="grid gap-5 lg:grid-cols-2">
+                {featuredGallery.map((item) => <CardEvidenceTile key={item.id} item={item} featured />)}
+              </div>
+            )}
+            {remainingGallery.length > 0 && (
+              <div className="grid gap-4 lg:grid-cols-3">
+                {remainingGallery.map((item) => <CardEvidenceTile key={item.id} item={item} />)}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="rounded-lg border border-white/10 bg-white/5 p-5">
+            <div className="text-xs font-black uppercase text-amber-100">Limited Card Evidence</div>
+            <h2 className="mt-2 text-3xl font-black uppercase text-white">No Card Conviction Yet</h2>
+            <p className="mt-3 text-lg font-semibold leading-8 text-white/75">{report.favourite_card_analysis.favourite_card_reason || report.feared_card_analysis.evidence_summary}</p>
+            <Evidence evidence={[...safeArray<string>(report.favourite_card_analysis.evidence), ...safeArray<string>(report.feared_card_analysis.evidence)]} />
+          </div>
+        )}
+      </Section>
+
+      <Section title="Win Rate Verdict" icon={<Gauge size={20} />}>
+        <WinRateVerdictPanel report={report} />
+      </Section>
 
       <Section title={report.personality_report.section_title} icon={<Sparkles size={20} />}>
         <div className="grid gap-5 lg:grid-cols-[1.1fr_.9fr]">
@@ -810,7 +1134,17 @@ function ReportDashboard({ report: rawReport, onReset }: { report: Report; onRes
         <div className="grid gap-5 lg:grid-cols-[.9fr_1.1fr]">
           <div className="rounded-lg border border-white/10 bg-white/5 p-5">
             <div className="text-xs font-black uppercase text-rose-200">Who hurt you?</div>
-            <h3 className="mt-2 text-4xl font-black uppercase text-white">{report.matchup_analysis.who_hurt_you?.card ?? "No clear suspect"}</h3>
+            <div className="mt-3 flex flex-wrap items-start gap-4">
+              <CardArtwork
+                card={report.feared_card_analysis.feared_card ?? report.feared_card_analysis.leading_candidate}
+                fallbackName={report.feared_card_analysis.feared_card_name ?? report.matchup_analysis.who_hurt_you?.card ?? "No clear suspect"}
+                large
+              />
+              <div className="min-w-0 flex-1">
+                <h3 className="text-4xl font-black uppercase text-white">{report.feared_card_analysis.feared_card_name ?? report.matchup_analysis.who_hurt_you?.card ?? "No clear suspect"}</h3>
+                <p className="mt-3 text-sm font-semibold leading-6 text-white/65">{report.feared_card_analysis.roast ?? report.feared_card_analysis.evidence_summary}</p>
+              </div>
+            </div>
             {report.matchup_analysis.who_hurt_you && (
               <div className="mt-5 grid gap-3 sm:grid-cols-2">
                 <Metric label="Faced" value={report.matchup_analysis.who_hurt_you.faced} tone="blue" />
@@ -872,6 +1206,10 @@ function ReportDashboard({ report: rawReport, onReset }: { report: Report; onRes
             </div>
           </div>
         </div>
+      </Section>
+
+      <Section title="Selected Roast Modules" icon={<Crosshair size={20} />}>
+        <RoastModuleList modules={report.roast_modules} />
       </Section>
 
       <Section title="Supporting Evidence" icon={<Swords size={20} />}>
@@ -942,8 +1280,8 @@ function ReportDashboard({ report: rawReport, onReset }: { report: Report; onRes
           <div className="grid gap-6 lg:grid-cols-[1fr_.9fr]">
             <div>
               <div className="text-xs font-black uppercase text-amber-100">Final Verdict</div>
-              <h2 className="mt-2 text-4xl font-black uppercase leading-tight text-white">{report.fraud_score.tier}</h2>
-              <p className="mt-4 text-xl font-black leading-8 text-amber-50">"{report.fraud_score.headline_roast}"</p>
+              <h2 className="mt-2 text-4xl font-black uppercase leading-tight text-white">{report.roast_narrative.final_title || report.fraud_score.tier}</h2>
+              <p className="mt-4 text-xl font-black leading-8 text-amber-50">"{report.roast_narrative.final_verdict || report.fraud_score.headline_roast}"</p>
               <p className="mt-4 text-sm font-semibold leading-6 text-white/60">{report.disclaimer}</p>
             </div>
             <div className="rounded-lg border border-white/10 bg-slate-950/60 p-5">
