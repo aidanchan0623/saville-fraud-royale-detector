@@ -6,6 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.services.analysis_service import (
     AnalysisService,
+    REPORT_SCHEMA_VERSION,
     average_deck_elixir,
     build_fraud_score,
     build_deck_personality,
@@ -20,6 +21,7 @@ from app.services.analysis_service import (
     normalize_player_tag,
     rank_traumatic_opponent_cards,
 )
+from app.models.schemas import ReportResponse
 from app.rules.deck_templates import DECK_STYLE_COPY
 from app.rules.expression_selector import ExpressionSelector
 from app.rules.fraud_score_templates import CONTRIBUTOR_COPY, TIER_COPY
@@ -157,6 +159,7 @@ class AnalysisTests(unittest.TestCase):
 
     def test_report_has_new_sections_and_compatible_legacy_fields(self):
         report = self.build_sample_report()
+        self.assertEqual(report["schema_version"], REPORT_SCHEMA_VERSION)
         for key in ("fraud_score", "personality_report", "deck_personality", "roast_report", "roasts"):
             self.assertIn(key, report)
 
@@ -165,6 +168,14 @@ class AnalysisTests(unittest.TestCase):
         self.assertTrue(report["fraud_score"]["contributors"])
         self.assertTrue(report["personality_report"]["scope_note"])
         self.assertTrue(report["deck_personality"]["plain_explanation"])
+
+    def test_response_model_preserves_new_report_sections(self):
+        serialized = ReportResponse.model_validate(self.build_sample_report()).model_dump()
+        self.assertEqual(serialized["schema_version"], REPORT_SCHEMA_VERSION)
+        self.assertIn("fraud_score", serialized)
+        self.assertIn("personality_report", serialized)
+        self.assertIn("deck_personality", serialized)
+        self.assertIn("plain_language_explanation", serialized["roasts"][0])
 
     def test_report_has_no_duplicate_roast_rule_ids(self):
         report = self.build_sample_report()

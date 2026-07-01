@@ -17,6 +17,9 @@ from app.services.card_data_service import CardDataService, get_card_service
 from app.services.roast_engine import RoastEngine
 
 
+REPORT_SCHEMA_VERSION = "report-v2"
+
+
 def normalize_player_tag(tag: str) -> str:
     decoded = unquote(str(tag)).strip().upper()
     decoded = decoded.replace("#", "")
@@ -985,6 +988,7 @@ class AnalysisService:
         title = f"{personality_report['title']} - {fraud_score['tier']}".strip()
 
         return {
+            "schema_version": REPORT_SCHEMA_VERSION,
             "player_summary": {
                 "name": player.get("name", "Unknown Player"),
                 "tag": player.get("tag", player_tag),

@@ -20,6 +20,7 @@ export interface Roast {
 }
 
 export interface Report {
+  schema_version: string;
   player_summary: {
     name: string;
     tag: string;

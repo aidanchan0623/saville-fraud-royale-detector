@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, Query
 from app.config import settings
 from app.db import get_cached_report, save_cached_report
 from app.models.schemas import ReportResponse
-from app.services.analysis_service import get_analysis_service, normalize_player_tag
+from app.services.analysis_service import REPORT_SCHEMA_VERSION, get_analysis_service, normalize_player_tag
 from app.services.clash_api import ClashApiService
 
 router = APIRouter()
@@ -26,10 +26,10 @@ async def report(
     if not normalized:
         raise HTTPException(status_code=400, detail="Invalid player tag. Try a tag like #MID001.")
 
-    cache_key = f"{normalized}:{goblin_mode}:{seed}:{settings.use_mock_data}"
+    cache_key = f"{REPORT_SCHEMA_VERSION}:{normalized}:{goblin_mode}:{seed}:{settings.use_mock_data}"
     if not refresh:
         cached = get_cached_report(cache_key)
-        if cached:
+        if cached and cached.get("schema_version") == REPORT_SCHEMA_VERSION:
             return cached
 
     clash_api = ClashApiService()
@@ -46,4 +46,3 @@ async def report(
     )
     save_cached_report(cache_key, report_payload)
     return report_payload
-
