@@ -28,7 +28,7 @@ from app.services.community_meme_service import COMMUNITY_MEME_DISCLAIMER, analy
 from app.services.roast_engine import RoastEngine
 
 
-REPORT_SCHEMA_VERSION = "report-v6"
+REPORT_SCHEMA_VERSION = "report-v7"
 LEVEL_ADVANTAGE_THRESHOLD = 0.75
 
 
@@ -1220,7 +1220,7 @@ def calculate_performance_loss_component(
     clutch_analysis: dict[str, Any],
 ) -> dict[str, Any]:
     verdict = win_rate_verdict or {}
-    total = int(verdict.get("total_eligible_matches") or battle_summary.get("eligible_battles") or battle_summary.get("battles_analysed") or 0)
+    total = int(verdict["total_eligible_matches"]) if verdict.get("total_eligible_matches") is not None else int(battle_summary.get("eligible_battles") if battle_summary.get("eligible_battles") is not None else battle_summary.get("battles_analysed", 0) or 0)
     wins = int(verdict.get("wins") if verdict.get("wins") is not None else battle_summary.get("wins", 0))
     losses = int(verdict.get("losses") if verdict.get("losses") is not None else battle_summary.get("losses", 0))
     draws = int(verdict.get("draws") if verdict.get("draws") is not None else battle_summary.get("draws", 0))
@@ -1312,7 +1312,16 @@ def calculate_level_reliance_component(level_analysis: dict[str, Any]) -> dict[s
             score += min(7, 3 + over_losses * 2)
         if over_losses and over_win_rate < 50:
             score += 3
-    score = min(25, score)
+    raw_score = min(25, score)
+    if sample <= 4:
+        sample_multiplier = 0.25
+    elif sample <= 9:
+        sample_multiplier = 0.60
+    elif sample <= 19:
+        sample_multiplier = 0.85
+    else:
+        sample_multiplier = 1.00
+    score = min(25, round(raw_score * sample_multiplier))
     confidence = "low" if sample < 5 or over_matches < 2 else confidence_from_sample(sample, 5, 12)
     roast = level_analysis.get("level_reliance_roast") or "No level excuse detected. This one is between you and the deck."
     evidence = [
@@ -1321,6 +1330,7 @@ def calculate_level_reliance_component(level_analysis: dict[str, Any]) -> dict[s
         f"Even/underlevelled combined win rate: {non_over_win_rate}%",
         f"Average level difference in wins: {level_analysis.get('average_level_difference_in_wins', 0)}",
         f"Average level difference in losses: {level_analysis.get('average_level_difference_in_losses', 0)}",
+        f"Level sample confidence multiplier: {sample_multiplier:.2f}",
     ]
     return _score_group(
         "level_reliance",
@@ -1332,7 +1342,8 @@ def calculate_level_reliance_component(level_analysis: dict[str, Any]) -> dict[s
         evidence,
         "Eligible level-known standard 1v1 matches only, split into overlevelled, even, and underlevelled records.",
         roast,
-        raw_score=score,
+        raw_score=raw_score,
+        extra={"sample_multiplier": sample_multiplier},
     )
 
 
@@ -1705,6 +1716,128 @@ def dedupe_roasts(roasts: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return unique
 
 
+def _score_confidence_rank(value: str) -> int:
+    return {"high": 3, "medium": 2, "low": 1}.get(value, 0)
+
+
+def build_structured_evidence(
+    fraud_score: dict[str, Any],
+    deck_analysis: dict[str, Any],
+    level_analysis: dict[str, Any],
+    behaviour_analysis: dict[str, Any],
+    matchup_analysis: dict[str, Any],
+    win_rate_verdict: dict[str, Any],
+) -> list[dict[str, Any]]:
+    score_groups = {item.get("key") or item.get("group"): item for item in fraud_score.get("score_groups", [])}
+    evidence: list[dict[str, Any]] = []
+
+    community = score_groups.get("community_meme", {})
+    matched_packages = community.get("matched_combinations", [])
+    matched_cards = community.get("matched_cards", [])
+    if matched_packages:
+        community_observation = f"Community meme package matched: {', '.join(matched_packages)}."
+    elif matched_cards:
+        community_observation = f"Community meme cards matched: {', '.join(matched_cards[:5])}."
+    else:
+        community_observation = "No strong community-meme deck package crossed the evidence line."
+    evidence.append(
+        {
+            "id": "deck_meme_exposure",
+            "title": "Deck meme exposure",
+            "observation": community_observation,
+            "sample_size": int(community.get("sample_size", len(deck_analysis.get("current_deck", []))) or 0),
+            "confidence": community.get("confidence", "low"),
+            "score_impact": int(community.get("points", 0) or 0),
+            "roast_key": "community_meme_score_v1",
+            "roast_text": community.get("roast", "The deck kept its receipts quiet."),
+            "receipts": community.get("evidence", [])[:8],
+        }
+    )
+
+    performance = score_groups.get("performance_loss", {})
+    wins = int(win_rate_verdict.get("wins", 0) or 0)
+    losses = int(win_rate_verdict.get("losses", 0) or 0)
+    draws = int(win_rate_verdict.get("draws", 0) or 0)
+    total = int(win_rate_verdict.get("total_eligible_matches", 0) or 0)
+    win_rate = int(win_rate_verdict.get("win_rate", 0) or 0)
+    evidence.append(
+        {
+            "id": "loss_pattern",
+            "title": "Loss-pattern evidence",
+            "observation": f"Eligible battle-log record: {wins}-{losses}-{draws} across {total} matches ({win_rate}% win rate).",
+            "sample_size": total,
+            "confidence": performance.get("confidence", win_rate_verdict.get("confidence", "low")),
+            "score_impact": int(performance.get("points", 0) or 0),
+            "roast_key": "performance_loss_score_v1",
+            "roast_text": performance.get("roast", win_rate_verdict.get("roast", "The record is documented, not guessed.")),
+            "receipts": performance.get("evidence", win_rate_verdict.get("evidence", []))[:8],
+        }
+    )
+
+    level = score_groups.get("level_reliance", {})
+    level_sample = int(level_analysis.get("level_known_sample_size", 0) or 0)
+    over_losses = int(level_analysis.get("meaningful_level_advantage_losses", 0) or 0)
+    over_wins = int(level_analysis.get("meaningful_level_advantage_wins", 0) or 0)
+    avg_loss_diff = level_analysis.get("average_level_difference_in_losses", 0)
+    level_observation = (
+        f"Level-known overlevelled record: {over_wins}-{over_losses} with average loss level difference {avg_loss_diff:+}."
+        if level_sample
+        else "No level-known standard 1v1 sample was available."
+    )
+    evidence.append(
+        {
+            "id": "level_context",
+            "title": "Level context",
+            "observation": level_observation,
+            "sample_size": level_sample,
+            "confidence": level.get("confidence", level_analysis.get("confidence", "low")),
+            "score_impact": int(level.get("points", 0) or 0),
+            "roast_key": "level_context_v2",
+            "roast_text": level.get("roast", level_analysis.get("level_reliance_roast", "No level excuse detected.")),
+            "receipts": level.get("evidence", level_analysis.get("evidence", []))[:8],
+        }
+    )
+
+    if behaviour_analysis.get("post_loss_opportunities", 0):
+        changed = int(behaviour_analysis.get("changes_after_losses", 0) or 0)
+        opportunities = int(behaviour_analysis.get("post_loss_opportunities", 0) or 0)
+        evidence.append(
+            {
+                "id": "deck_changes_after_losses",
+                "title": "Deck changes after losses",
+                "observation": f"Deck changed after {changed} of {opportunities} eligible losses.",
+                "sample_size": opportunities,
+                "confidence": behaviour_analysis.get("confidence", "low"),
+                "score_impact": 0,
+                "roast_key": "deck_change_observation_v1",
+                "roast_text": "The meta did not necessarily shift; the deck list did.",
+                "receipts": behaviour_analysis.get("evidence", [])[:8],
+            }
+        )
+
+    predator = matchup_analysis.get("natural_predator", {})
+    if predator.get("matches", 0):
+        evidence.append(
+            {
+                "id": "opponent_core_difficulty",
+                "title": "Recurring opponent-core difficulty",
+                "observation": f"Lost {predator.get('losses', 0)} of {predator.get('matches', 0)} eligible battles against {predator.get('label', 'a recurring opponent core')}.",
+                "sample_size": int(predator.get("matches", 0) or 0),
+                "confidence": predator.get("confidence", matchup_analysis.get("confidence", "low")),
+                "score_impact": 0,
+                "roast_key": "opponent_core_observation_v1",
+                "roast_text": "That matchup is not a counter anymore. It is a case study.",
+                "receipts": predator.get("evidence", [])[:8],
+            }
+        )
+
+    return sorted(
+        evidence,
+        key=lambda item: (_score_confidence_rank(item["confidence"]), item["score_impact"], item["sample_size"], len(item["observation"])),
+        reverse=True,
+    )
+
+
 @dataclass
 class AnalysisService:
     card_service: CardDataService
@@ -1812,6 +1945,14 @@ class AnalysisService:
         headline_roast = roasts[0] if roasts else {"evidence": []}
         narrative = roast_system["roast_narrative"]
         title = narrative.get("final_title") or f"{personality_report['title']} - {fraud_score['tier']}".strip()
+        structured_evidence = build_structured_evidence(
+            fraud_score,
+            deck_analysis,
+            level_analysis,
+            behaviour_analysis,
+            matchup_analysis,
+            win_rate_verdict,
+        )
         return {
             "schema_version": REPORT_SCHEMA_VERSION,
             "player_summary": {
@@ -1837,6 +1978,7 @@ class AnalysisService:
             "roast_narrative": narrative,
             "roast_modules": roast_system["roast_modules"],
             "card_evidence_gallery": roast_system["card_evidence_gallery"],
+            "structured_evidence": structured_evidence,
             "fraud_score": fraud_score,
             "personality_report": personality_report,
             "roast_report": {

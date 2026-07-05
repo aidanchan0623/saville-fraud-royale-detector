@@ -5,8 +5,22 @@ from app.db import get_cached_report, save_cached_report
 from app.models.schemas import ReportResponse
 from app.services.analysis_service import REPORT_SCHEMA_VERSION, get_analysis_service, normalize_player_tag
 from app.services.clash_api import ClashApiService
+from app.services.community_meme_service import get_taxonomy_version
 
 router = APIRouter()
+
+
+def build_report_cache_key(normalized_tag: str, goblin_mode: bool, seed: str | None, source_mode: str) -> str:
+    return ":".join(
+        [
+            f"player={normalized_tag}",
+            f"analysis={REPORT_SCHEMA_VERSION}",
+            f"taxonomy={get_taxonomy_version()}",
+            f"goblin={str(goblin_mode).lower()}",
+            f"source={source_mode}",
+            f"seed={seed or 'default'}",
+        ]
+    )
 
 
 @router.get("/demo-victims")
@@ -26,7 +40,8 @@ async def report(
     if not normalized:
         raise HTTPException(status_code=400, detail="Invalid player tag. Try a tag like #MID001.")
 
-    cache_key = f"{REPORT_SCHEMA_VERSION}:{normalized}:{goblin_mode}:{seed}:{settings.use_mock_data}"
+    source_mode = "mock" if settings.use_mock_data else "real"
+    cache_key = build_report_cache_key(normalized, goblin_mode, seed, source_mode)
     if not refresh:
         cached = get_cached_report(cache_key)
         if cached and cached.get("schema_version") == REPORT_SCHEMA_VERSION:

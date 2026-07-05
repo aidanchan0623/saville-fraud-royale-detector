@@ -37,6 +37,11 @@ def load_community_meme_taxonomy(path: str | Path | None = None) -> dict[str, An
         return json.load(handle)
 
 
+def get_taxonomy_version() -> str:
+    taxonomy = load_community_meme_taxonomy()
+    return str(taxonomy.get("version", "community-meme-taxonomy-unknown"))
+
+
 def _matched_meta(deck_names: list[str]) -> dict[str, Any]:
     deck_keys = {_name_key(name) for name in deck_names}
     best = {"style_kind": "custom_signature", "matched_count": 0, "matched_deck_name": None, "family": None}

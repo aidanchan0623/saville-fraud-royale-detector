@@ -36,6 +36,7 @@ from app.rules.roast_composer import template_catalog_counts
 from app.services.card_data_service import get_card_service
 from app.services.community_meme_service import COMMUNITY_MEME_DISCLAIMER, analyse_community_meme_deck
 from app.services.roast_engine import RoastEngine
+from app.routers.reports import build_report_cache_key
 
 
 PLAYER_TAG = "#TEST01"
@@ -241,6 +242,7 @@ class AnalysisTests(unittest.TestCase):
             "roast_narrative",
             "roast_modules",
             "card_evidence_gallery",
+            "structured_evidence",
         ):
             self.assertIn(key, report)
 
@@ -251,6 +253,12 @@ class AnalysisTests(unittest.TestCase):
         self.assertTrue(report["deck_personality"]["plain_explanation"])
         self.assertTrue(report["roast_narrative"]["opening_charge"])
         self.assertTrue(any(module["category"] == "final_verdict" for module in report["roast_modules"]))
+        self.assertGreaterEqual(len(report["structured_evidence"]), 3)
+        for evidence in report["structured_evidence"][:3]:
+            self.assertTrue(evidence["observation"])
+            self.assertIn(evidence["confidence"], {"low", "medium", "high"})
+            self.assertIn("sample_size", evidence)
+            self.assertTrue(evidence["roast_text"])
 
     def test_response_model_preserves_new_report_sections(self):
         serialized = ReportResponse.model_validate(self.build_sample_report()).model_dump()
@@ -262,6 +270,7 @@ class AnalysisTests(unittest.TestCase):
         self.assertIn("feared_card_analysis", serialized)
         self.assertIn("win_rate_verdict", serialized)
         self.assertIn("card_evidence_gallery", serialized)
+        self.assertIn("structured_evidence", serialized)
         self.assertIn("plain_language_explanation", serialized["roasts"][0])
 
     def test_report_has_no_duplicate_roast_rule_ids(self):
@@ -389,6 +398,31 @@ class AnalysisTests(unittest.TestCase):
         self.assertLessEqual(report["fraud_score"]["score"], 100)
         self.assertIn(COMMUNITY_MEME_DISCLAIMER, report["fraud_score"]["score_receipts"])
 
+    def test_cache_key_includes_analysis_taxonomy_mode_and_source(self):
+        key = build_report_cache_key("MID001", False, "savile", "mock")
+        self.assertIn(f"analysis={REPORT_SCHEMA_VERSION}", key)
+        self.assertIn("taxonomy=community-meme-taxonomy-v1", key)
+        self.assertIn("goblin=false", key)
+        self.assertIn("source=mock", key)
+        self.assertIn("seed=savile", key)
+        self.assertNotEqual(key, build_report_cache_key("MID001", True, "savile", "mock"))
+        self.assertNotEqual(key, build_report_cache_key("MID001", False, "savile", "real"))
+
+    def test_structured_evidence_separates_observation_sample_confidence_and_roast(self):
+        report = self.build_sample_report()
+        for item in report["structured_evidence"][:3]:
+            self.assertTrue(item["observation"])
+            self.assertIsInstance(item["sample_size"], int)
+            self.assertIn(item["confidence"], {"low", "medium", "high"})
+            self.assertTrue(item["roast_text"])
+            self.assertNotEqual(item["observation"], item["roast_text"])
+
+    def test_structured_observations_do_not_claim_unsupported_decision_facts(self):
+        report = self.build_sample_report()
+        observations = " ".join(item["observation"] for item in report["structured_evidence"]).lower()
+        for phrase in ["panic-switched", "psychologically dependent", "cheater", "intentionally relied", "because you are bad"]:
+            self.assertNotIn(phrase, observations)
+
     def test_community_meme_package_bonus_is_stronger_than_mega_knight_alone(self):
         mk_only = ["Mega Knight", "Knight", "Musketeer", "Cannon", "Ice Spirit", "Skeletons", "The Log", "Fireball"]
         landlord_package = ["Mega Knight", "Royal Recruits", "Wizard", "Firecracker", "Arrows", "Zap", "Bats", "Cannon"]
@@ -427,6 +461,22 @@ class AnalysisTests(unittest.TestCase):
         self.assertLessEqual(level["points"], 5)
         self.assertFalse(level_analysis["level_chart_visible"])
 
+    def test_zero_eligible_matches_does_not_create_extreme_loss_score(self):
+        score = calculate_troll_score(
+            {"eligible_battles": 0, "battles_analysed": 30, "wins": 15, "losses": 15, "draws": 0, "win_rate": 50, "loss_rate": 50},
+            {"current_deck": deck(self.normal_opp), "recent_main_deck": {"cards": [], "card_details": []}},
+            {},
+            detect_level_analysis(PLAYER_TAG, []),
+            {},
+            {},
+            {"close_wins": 0, "close_losses": 0},
+            {"total_eligible_matches": 0, "wins": 0, "losses": 0, "draws": 0, "win_rate": 0, "loss_rate": 0, "close_wins": 0, "close_losses": 0},
+            ExpressionSelector("zero-eligible"),
+        )
+        performance = next(group for group in score["score_groups"] if group["key"] == "performance_loss")
+        self.assertLessEqual(performance["points"], 5)
+        self.assertEqual(performance["sample_size"], 0)
+
     def test_level_chart_uses_only_eligible_personal_1v1_matches(self):
         valid = {**battle(self.main, self.opp, "win", 14, 13), "battleTime": "20260630T120000.000Z"}
         draft = {**battle(self.main, self.opp, "loss", 14, 13), "type": "tripleDraft", "battleTime": "20260630T120100.000Z"}
@@ -447,16 +497,18 @@ class AnalysisTests(unittest.TestCase):
         loss_roast = next(group for group in loss_score["score_groups"] if group["key"] == "level_reliance")["roast"]
         self.assertNotEqual(win_roast, loss_roast)
 
-    def test_frontend_supporting_evidence_removed_and_score_charts_added(self):
-        source = Path(__file__).resolve().parents[2].joinpath("frontend", "src", "App.tsx").read_text(encoding="utf-8")
+    def test_frontend_supporting_evidence_removed_and_simplified_sections_added(self):
+        frontend_src = Path(__file__).resolve().parents[2].joinpath("frontend", "src")
+        source = "\n".join(path.read_text(encoding="utf-8") for path in frontend_src.rglob("*.tsx"))
         self.assertNotIn("Supporting Evidence", source)
         self.assertNotIn("Fraud Score Contributors", source)
         self.assertNotIn("Loss Type Breakdown", source)
         self.assertNotIn("Most-Used Cards", source)
         self.assertNotIn("Recent Match Trend", source)
-        self.assertIn("Why The Score Exists", source)
-        self.assertIn("Levels Did Not Save You", source)
-        self.assertIn("levelSample >= 5", source)
+        self.assertIn("Current Deck", source)
+        self.assertIn("Evidence", source)
+        self.assertIn("Level Context", source)
+        self.assertIn("Not enough level-known battles to make this chart worth showing.", source)
 
     def test_roast_copy_avoids_hard_prohibited_language(self):
         report = self.build_sample_report()
